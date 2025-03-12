@@ -1,0 +1,4 @@
+node_modules/
+# WASM and ABI files
+*.wasm
+*.abi
