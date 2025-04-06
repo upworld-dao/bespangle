@@ -1,0 +1,55 @@
+name: Deploy Antelope Contracts
+
+on:
+  push:
+    branches:
+      - 'jungle4'
+      - 'kylin'
+      - 'mainnet'
+      - 'telos'
+      - 'wax'
+  workflow_dispatch:
+    inputs:
+      network:
+        description: 'Network to deploy to'
+        required: true
+        default: 'jungle4'
+        type: choice
+        options:
+          - jungle4
+          - kylin
+          - mainnet
+          - telos
+          - wax
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Antelope CDT
+        run: |
+          wget https://github.com/AntelopeIO/cdt/releases/download/v4.1.0/cdt_4.1.0-1_amd64.deb
+          sudo apt install ./cdt_4.1.0-1_amd64.deb
+      
+      - name: Setup cleos
+        run: |
+          wget https://github.com/AntelopeIO/leap/releases/download/v5.0.3/leap_5.0.3_amd64.deb
+          sudo apt install ./leap_5.0.3_amd64.deb
+      
+      - name: Configure Wallet
+        env:
+          WALLET_PASSWORD: ${{ secrets.WALLET_PASSWORD }}
+          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        run: |
+          mkdir -p ~/eosio-wallet
+          cleos wallet create --file ~/wallet_password.txt
+          cleos wallet unlock --password $(cat ~/wallet_password.txt)
+          cleos wallet import --private-key $PRIVATE_KEY
+      
+      - name: Deploy Contracts
+        run: |
+          chmod +x ./deploy.sh
+          ./deploy.sh --config config.env --action both --target all
