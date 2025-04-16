@@ -5,3 +5,5 @@ Makefile
 *.wasm
 *.abi
 .eosproj
+node_modules
+build

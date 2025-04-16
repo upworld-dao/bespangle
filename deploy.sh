@@ -238,8 +238,10 @@ build_contract() {
     local contract_include_dir="$contract_base_path/include" # Path to include dir within org
     local contract_resource_dir="$contract_base_path/resource" # Path to resource dir within org
     local source_file="$contract_src_dir/${contract_name}.cpp"
-    local output_wasm="${contract_name}.wasm" # Output WASM in the root dir
-    local output_abi="${contract_name}.abi"   # Output ABI in the root dir
+    local output_dir="build/$contract_name" # Define output directory
+    mkdir -p "$output_dir"
+    local output_wasm="$output_dir/${contract_name}.wasm"
+    local output_abi="$output_dir/${contract_name}.abi"
 
     if should_process "$contract_name" && { [ "$ACTION" = "build" ] || [ "$ACTION" = "both" ]; }; then
         echo "Building $contract_name from $source_file..."
@@ -251,9 +253,10 @@ build_contract() {
 
         # Construct eosio-cpp command
         # Note: Assumes includes are relative to the 'org' directory
-        # Outputting WASM/ABI to the project root where deploy_contract expects them.
-        echo "Command: eosio-cpp -abigen -I $contract_include_dir -R $contract_resource_dir -contract \"$contract_name\" -o \"$output_wasm\" \"$source_file\""
-        eosio-cpp -abigen -I "$contract_include_dir" -R "$contract_resource_dir" -contract "$contract_name" -o "$output_wasm" "$source_file"
+        # Outputting WASM/ABI to the build directory.
+        echo "Outputting to $output_dir"
+        echo "Command: cdt-cpp -abigen -I \"$contract_include_dir\" -R \"$contract_resource_dir\" -contract \"$contract_name\" -o \"$output_wasm\" \"$source_file\""
+        cdt-cpp -abigen -I "$contract_include_dir" -R "$contract_resource_dir" -contract "$contract_name" -o "$output_wasm" "$source_file"
         
         # Check if build succeeded by verifying output files exist
         if [ -f "$output_wasm" ] && [ -f "$output_abi" ]; then
@@ -272,17 +275,20 @@ build_contract() {
 #       and locate the .wasm/.abi files (org.wasm, org.abi)
 deploy_contract() {
     local contract_file=$1 # e.g., org
-    local contract_var_name="$(echo ${contract_file} | tr '[:lower:]' '[:upper:]')_CONTRACT" # e.g., ORG_CONTRACT
-    local contract_account=$(get_contract_account $contract_var_name)
     local wasm_file="${contract_file}.wasm"
     local abi_file="${contract_file}.abi"
 
-    if [ -z "$contract_account" ]; then
-        echo "Error: Account not defined for $contract_var_name on network $NETWORK."
-        return 1 # Indicate error
-    fi
-
     if should_process "$contract_file" && { [ "$ACTION" = "deploy" ] || [ "$ACTION" = "both" ]; }; then
+        # --- Start Moved Block ---
+        local contract_var_name="$(echo ${contract_file} | tr '[:lower:]' '[:upper:]')_CONTRACT" # e.g., ORG_CONTRACT
+        local contract_account=$(get_contract_account $contract_var_name)
+
+        if [ -z "$contract_account" ]; then
+            echo "Error: Account not defined for $contract_var_name on network $NETWORK."
+            return 1 # Indicate error
+        fi
+        # --- End Moved Block ---
+
         echo "Deploying $contract_file to account $contract_account on $NETWORK..."
         
         if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ]; then
@@ -337,52 +343,3 @@ build_contract tokenstaker; deploy_contract tokenstaker
 # build_contract ???; deploy_contract giver_rep
 # build_contract ???; deploy_contract bounded_hll
 
-# Change to the base contract directory
-cd "$BASE_CONTRACT_PATH"
-
-# Run CMake to generate build files
-echo "Running CMake..."
-cmake . $D_PART
-echo "CMake configuration complete."
-
-# Build all contracts
-echo "Building contracts..."
-build_contract "org"
-build_contract "authority"
-build_contract "badgedata"
-build_contract "cumulative"
-build_contract "simplebadge"
-build_contract "statistics"
-build_contract "simmanager"
-build_contract "andemitter"
-build_contract "aemanager"
-build_contract "subscription"
-build_contract "boundedagg"
-build_contract "boundedstats"
-build_contract "bamanager"
-build_contract "requests"
-build_contract "bounties"
-build_contract "govweight"
-build_contract "tokenstaker"
-
-# Deploy all contracts
-echo "Deploying contracts to $NETWORK..."
-deploy_contract "$SIMPLE_MANAGER_CONTRACT" "simmanager"
-deploy_contract "$ANDEMITTER_MANAGER_CONTRACT" "aemanager"
-deploy_contract "$BOUNDED_AGG_MANAGER_CONTRACT" "bamanager"
-deploy_contract "$ORG_CONTRACT" "org"
-deploy_contract "$AUTHORITY_CONTRACT" "authority"
-deploy_contract "$SIMPLEBADGE_CONTRACT" "simplebadge"
-deploy_contract "$BADGEDATA_CONTRACT" "badgedata"
-deploy_contract "$CUMULATIVE_CONTRACT" "cumulative"
-deploy_contract "$STATISTICS_CONTRACT" "statistics"
-deploy_contract "$ANDEMITTER_CONTRACT" "andemitter"
-deploy_contract "$BOUNDED_AGG_CONTRACT" "boundedagg"
-deploy_contract "$BOUNDED_STATS_CONTRACT" "boundedstats"
-deploy_contract "$SUBSCRIPTION_CONTRACT" "subscription"
-deploy_contract "$REQUESTS_CONTRACT" "requests"
-deploy_contract "$BOUNTIES_CONTRACT" "bounties"
-deploy_contract "$GOV_WEIGHT_CONTRACT" "govweight"
-deploy_contract "$TOKEN_STAKER_CONTRACT" "tokenstaker"
-
-echo "Deployment to $NETWORK complete."

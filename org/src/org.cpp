@@ -18,7 +18,12 @@ ACTION org::chkscontract(name org, name checks_contract) {
 ACTION org::image(name org, string ipfs_image) {
   // Check if the caller is authorized for this action
   name current_account = get_first_receiver();
-  check(is_action_authorized(org, "image"_n, current_account), "Account not authorized for this action");
+  action(
+    permission_level{get_self(), "active"_n}, // Permission of this contract
+    name(AUTHORITY_CONTRACT),                  // Target authority contract (from CMake define)
+    "checkauth"_n,                             // The action to call on authority contract
+    std::make_tuple(org, "image"_n, get_first_receiver()) // Args: org_scope, action_name, account_to_check
+  ).send();
     
   // Open the table with the contract's scope
   orgs_index _orgs(get_self(), get_self().value);

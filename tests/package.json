@@ -1,0 +1,27 @@
+{
+  "name": "bespangle-tests",
+  "version": "1.0.0",
+  "description": "VeRT tests for Bespangle smart contracts",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "mocha *.spec.js"
+  },
+  "keywords": [
+    "antelope",
+    "eosio",
+    "vert",
+    "smart-contracts"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@eosnetwork/vert": "1.2.3",
+    "chai": "latest",
+    "chai-as-promised": "^8.0.1",
+    "mocha": "latest"
+  },
+  "dependencies": {
+    "@greymass/eosio": "^0.7.0"
+  }
+}
