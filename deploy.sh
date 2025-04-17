@@ -251,14 +251,34 @@ build_contract() {
             return 1 # Indicate error
         fi
 
-        # Construct eosio-cpp command
-        # Note: Assumes includes are relative to the 'org' directory
-        # Outputting WASM/ABI to the build directory.
-        echo "Outputting to $output_dir"
-        echo "Command: cdt-cpp -abigen -I \"$contract_include_dir\" -R \"$contract_resource_dir\" -contract \"$contract_name\" -o \"$output_wasm\" \"$source_file\""
-        cdt-cpp -abigen -I "$contract_include_dir" -R "$contract_resource_dir" -contract "$contract_name" -o "$output_wasm" "$source_file"
-        
-        # Check if build succeeded by verifying output files exist
+        # --- Incremental Build Check --- 
+        local rebuild_needed=true # Default to needing rebuild
+        if [ -f "$output_wasm" ]; then 
+            local output_mtime=$(stat -c %Y "$output_wasm")
+            local source_mtime=$(stat -c %Y "$source_file")
+            # Find the newest mtime among the source .cpp and all .hpp files in include dir
+            local newest_dep_mtime=$(find "$source_file" "$contract_include_dir" -maxdepth 1 -type f \( -name '*.cpp' -o -name '*.hpp' \) -printf '%T@\n' | sort -nr | head -n 1)
+            
+            # Use bc for floating point comparison potential
+            if (( $(echo "$newest_dep_mtime <= $output_mtime" | bc -l) )); then
+                echo "Skipping build for $contract_name, output ($output_wasm) is up-to-date."
+                rebuild_needed=false
+            else
+                 echo "Rebuilding $contract_name, source/header newer than output ($output_wasm)."
+            fi
+        fi
+
+        if [ "$rebuild_needed" = true ] ; then
+            # Construct eosio-cpp command
+            # Note: Assumes includes are relative to the 'org' directory
+            # Outputting WASM/ABI to the build directory.
+            echo "Outputting to $output_dir"
+            echo "Command: cdt-cpp -abigen -I \"$contract_include_dir\" -R \"$contract_resource_dir\" -contract \"$contract_name\" -o \"$output_wasm\" \"$source_file\""
+            cdt-cpp -abigen -I "$contract_include_dir" -R "$contract_resource_dir" -contract "$contract_name" -o "$output_wasm" "$source_file"
+            
+            # Check if build succeeded by verifying output files exist
+        fi # End of rebuild_needed check
+
         if [ -f "$output_wasm" ] && [ -f "$output_abi" ]; then
             echo "Build of $contract_name complete. Output: $output_wasm, $output_abi"
         else
@@ -342,4 +362,3 @@ build_contract tokenstaker; deploy_contract tokenstaker
 # build_contract ???; deploy_contract hll_emitter
 # build_contract ???; deploy_contract giver_rep
 # build_contract ???; deploy_contract bounded_hll
-

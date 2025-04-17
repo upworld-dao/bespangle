@@ -12,13 +12,91 @@ PROJECT_ROOT=$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel) # More robust 
 
 # Function to build local contracts (runs inside Docker)
 build_local_contracts() {
-    echo "--- Building required contracts for testing (org, subscription) ---"
-    # Ensure deploy script is executable
+    echo "--- Dynamically building all contracts found in /workspace/org/src --- "
     chmod +x ./deploy.sh
-    # Pass necessary args
-    ./deploy.sh -a build -t org
-    ./deploy.sh -a build -t subscription
+
+    SRC_DIR="/workspace/org/src"
+    if [ ! -d "${SRC_DIR}" ]; then
+        echo "ERROR: Source directory ${SRC_DIR} not found. Cannot build contracts."
+        exit 1
+    fi
+
+    echo "Starting incremental parallel contract builds using $(nproc) processes..."
+    find "${SRC_DIR}" -maxdepth 1 -type f -name '*.cpp' -print0 | xargs -0 -P $(nproc) -I {} bash -c '
+        cpp_file="{}"
+        contract_name=$(basename "${cpp_file}" .cpp)
+        wasm_file="./build/${contract_name}/${contract_name}.wasm"
+        abi_file="./build/${contract_name}/${contract_name}.abi"
+
+        # Robust timestamp logic for .cpp/.hpp and .wasm/.abi (macOS/Linux)
+        # Always get integer mtime or fail if not possible
+        if cpp_mtime=$(stat -f "%m" "${cpp_file}" 2>/dev/null); then :; \
+        elif cpp_mtime=$(stat -c "%Y" "${cpp_file}" 2>/dev/null); then :; \
+        else echo "ERROR: Unable to get mtime for ${cpp_file}" >&2; exit 1; fi
+
+        hpp_file="${cpp_file%/*}/${contract_name}.hpp"
+        if [ -f "$hpp_file" ]; then
+            if hpp_mtime=$(stat -f "%m" "$hpp_file" 2>/dev/null); then :; \
+            elif hpp_mtime=$(stat -c "%Y" "$hpp_file" 2>/dev/null); then :; \
+            else echo "ERROR: Unable to get mtime for $hpp_file" >&2; exit 1; fi
+        else
+            hpp_mtime=0
+        fi
+
+        if [ "$cpp_mtime" -gt "$hpp_mtime" ]; then
+            latest_src_mtime=$cpp_mtime
+        else
+            latest_src_mtime=$hpp_mtime
+        fi
+
+        wasm_mtime=0
+        abi_mtime=0
+        if [ -f "$wasm_file" ]; then
+            if wasm_mtime=$(stat -f "%m" "$wasm_file" 2>/dev/null); then :; \
+            elif wasm_mtime=$(stat -c "%Y" "$wasm_file" 2>/dev/null); then :; \
+            else echo "ERROR: Unable to get mtime for $wasm_file" >&2; exit 1; fi
+        fi
+        if [ -f "$abi_file" ]; then
+            if abi_mtime=$(stat -f "%m" "$abi_file" 2>/dev/null); then :; \
+            elif abi_mtime=$(stat -c "%Y" "$abi_file" 2>/dev/null); then :; \
+            else echo "ERROR: Unable to get mtime for $abi_file" >&2; exit 1; fi
+        fi
+
+        # Only build if missing or out-of-date
+        echo "DEBUG: Checking contract $contract_name"
+        echo "  cpp_mtime: $cpp_mtime"
+        echo "  hpp_mtime: $hpp_mtime"
+        echo "  latest_src_mtime: $latest_src_mtime"
+        echo "  wasm_mtime: $wasm_mtime"
+        echo "  abi_mtime: $abi_mtime"
+        echo "  wasm exists? $( [ -f \"$wasm_file\" ] && echo yes || echo no )"
+        echo "  abi exists? $( [ -f \"$abi_file\" ] && echo yes || echo no )"
+        if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ] || [ "$latest_src_mtime" -gt "$wasm_mtime" ] || [ "$latest_src_mtime" -gt "$abi_mtime" ]; then
+            echo "Building: ${contract_name}..."
+            build_output=$(./deploy.sh -a build -t "${contract_name}" 2>&1)
+            exit_code=$?
+            if [ $exit_code -ne 0 ]; then
+                echo "-------------------------------------------------" >&2
+                echo "ERROR: Build failed for contract ${contract_name} (exit code: $exit_code)." >&2
+                echo "Output:" >&2
+                echo "$build_output" >&2
+                echo "-------------------------------------------------" >&2
+                exit 1
+            fi
+        else
+            echo "Skipping ${contract_name}, up-to-date."
+        fi
+    '
+
+    build_exit_code=$?
+    if [ $build_exit_code -ne 0 ]; then
+        echo "ERROR: One or more parallel builds failed. See error details above. Exiting."
+        exit 1
+    fi
+
+    echo "--- Finished building local contracts --- "
 }
+
 
 # --- Main Script Logic ---
 
