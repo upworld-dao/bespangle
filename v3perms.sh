@@ -146,6 +146,7 @@ transactions=(
   "$ANDEMITTER_CONTRACT activate $BOUNTIES_CONTRACT"
   "$ANDEMITTER_CONTRACT deactivate $BOUNTIES_CONTRACT"
   "$ANDEMITTER_CONTRACT deactivate $ANDEMITTER_MANAGER_CONTRACT"
+  "$BOUNDED_AGG_CONTRACT addbadge $BOUNDED_AGG_MANAGER_CONTRACT"
 )
 
 # Loop over each transaction, split it into its parts, and push it
