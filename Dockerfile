@@ -47,8 +47,31 @@ RUN echo "Node.js version: $(node --version)"
 RUN echo "npm version: $(npm --version)"
 RUN echo "CDT version: $(cdt-cpp --version)" && cdt-cpp --version | grep "${CDT_VERSION}"
 
+# Create a non-root user with the same UID/GID as the host user
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+
+# Create a user and group if they don't exist
+RUN groupadd -g ${GROUP_ID} developer 2>/dev/null || true \
+    && useradd -u ${USER_ID} -g ${GROUP_ID} -m developer 2>/dev/null || true \
+    && mkdir -p /workspace \
+    && mkdir -p /home/developer \
+    && chown -R ${USER_ID}:${GROUP_ID} /workspace \
+    && chown -R ${USER_ID}:${GROUP_ID} /home/developer
+
 # Set up a working directory inside the container
 WORKDIR /workspace
+
+# Switch to the non-root user
+USER ${USER_ID}:${GROUP_ID}
+
+# Set environment variables for the user
+ENV HOME=/home/developer
+ENV GIT_CONFIG_NOSYSTEM=1
+
+# Create a local git config that won't require root permissions
+RUN mkdir -p /home/developer/.config/git \
+    && git config --file /home/developer/.gitconfig safe.directory /workspace
 
 # Copy the entire project context into the image
 COPY . /workspace/

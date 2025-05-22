@@ -11,6 +11,20 @@ CONFIG_FILE="config.env"
 ACTION="both"
 CONTRACTS="all"
 
+# List of contracts to skip (tokenstaker and govweight)
+SKIP_CONTRACTS=("tokenstaker" "govweight" "bountmanager")
+
+# Function to check if a contract should be skipped
+should_skip_contract() {
+    local contract=$1
+    for skip_contract in "${SKIP_CONTRACTS[@]}"; do
+        if [ "$contract" = "$skip_contract" ]; then
+            return 0  # Return true (0) if contract should be skipped
+        fi
+    done
+    return 1  # Return false (1) if contract should be processed
+}
+
 # Function to display usage information
 print_usage() {
     echo "Usage: $0 [options]"
@@ -224,9 +238,74 @@ should_process() {
     return 1  # false if not found
 }
 
-# Parse arguments and prepare contract names
-parse_arguments 
-split_contract_names
+# Parse arguments
+parse_arguments
+
+# Define all available contracts (matching .cpp files in org/src)
+ALL_CONTRACTS=(
+    "aemanager"
+    "andemitter"     # Source file is andemitter.cpp
+    "authority"
+    "badgedata"
+    "bamanager"
+    "boundedagg"
+    "boundedstats"
+    "bounties"
+    "bountmanager"
+    "cumulative"
+    "govweight"
+    "org"
+    "requests"
+    "simmanager"
+    "simplebadge"
+    "statistics"
+    "subscription"
+    "tokenstaker"
+)
+
+# Initialize contracts array
+contracts_array=()
+
+# If specific contracts were provided, use them; otherwise, use all contracts
+if [ "$CONTRACTS" != "all" ]; then
+    split_contract_names
+    for contract in "${CONTRACT_NAMES[@]}"; do
+        if ! should_skip_contract "$contract"; then
+            contracts_array+=("$contract")
+            echo "Will process contract: $contract"
+        else
+            echo "Skipping contract: $contract (explicitly excluded)"
+        fi
+    done
+else
+    # Add all contracts that shouldn't be skipped
+    for contract in "${ALL_CONTRACTS[@]}"; do
+        if ! should_skip_contract "$contract"; then
+            contracts_array+=("$contract")
+            echo "Will process contract: $contract"
+        else
+            echo "Skipping contract: $contract (explicitly excluded)"
+        fi
+    done
+fi
+
+# Check if we have any contracts to process
+if [ ${#contracts_array[@]} -eq 0 ]; then
+    echo "No contracts to process after filtering. Exiting."
+    exit 0
+fi
+
+echo "--- Will process the following contracts: ---"
+for contract in "${contracts_array[@]}"; do
+    echo "- $contract"
+done
+echo "--------------------------------------------"
+
+# Check if we have any contracts to process
+if [ ${#contracts_array[@]} -eq 0 ]; then
+    echo "No contracts to process after filtering. Exiting."
+    exit 0
+fi
 
 # Build a specific contract using eosio-cpp
 # Arguments:
@@ -237,19 +316,37 @@ build_contract() {
     local contract_src_dir="$contract_base_path/src" # Path to the source directory
     local contract_include_dir="$contract_base_path/include" # Path to include dir within org
     local contract_resource_dir="$contract_base_path/resource" # Path to resource dir within org
-    local source_file="$contract_src_dir/${contract_name}.cpp"
-    local output_dir="build/$contract_name" # Define output directory
+    
+    # Handle special case for simmanager vs simplemanager
+    local source_file
+    local contract_name_for_build="$contract_name"
+    
+    if [ "$contract_name" = "simplemanager" ]; then
+        source_file="$contract_src_dir/simmanager.cpp"
+        contract_name_for_build="simmanager"  # Use the actual contract class name
+    else
+        source_file="$contract_src_dir/${contract_name}.cpp"
+    fi
+    
+    # Use a consistent build directory in the project root
+    local output_dir="${PROJECT_ROOT:-.}/build/$contract_name"
     mkdir -p "$output_dir"
     local output_wasm="$output_dir/${contract_name}.wasm"
     local output_abi="$output_dir/${contract_name}.abi"
 
     if should_process "$contract_name" && { [ "$ACTION" = "build" ] || [ "$ACTION" = "both" ]; }; then
-        echo "Building $contract_name from $source_file..."
+        echo "--- Building $contract_name ---"
+        echo "Source: $source_file"
+        echo "Output: $output_wasm"
         
         if [ ! -f "$source_file" ]; then
             echo "Error: Source file not found at '$source_file'"
+            ls -la "$(dirname "$source_file")" 2>/dev/null || echo "Source directory not found"
             return 1 # Indicate error
         fi
+        
+        # Ensure output directory exists
+        mkdir -p "$output_dir"
 
         # --- Incremental Build Check --- 
         local rebuild_needed=true # Default to needing rebuild
@@ -269,12 +366,37 @@ build_contract() {
         fi
 
         if [ "$rebuild_needed" = true ] ; then
-            # Construct eosio-cpp command
-            # Note: Assumes includes are relative to the 'org' directory
-            # Outputting WASM/ABI to the build directory.
-            echo "Outputting to $output_dir"
-            echo "Command: cdt-cpp -abigen -I \"$contract_include_dir\" -R \"$contract_resource_dir\" -contract \"$contract_name\" -o \"$output_wasm\" \"$source_file\""
-            cdt-cpp -abigen -I "$contract_include_dir" -R "$contract_resource_dir" -contract "$contract_name" -o "$output_wasm" "$source_file"
+            # Create output directory if it doesn't exist
+            mkdir -p "$output_dir"
+            
+            # Get the directory of the source file for relative includes
+            local source_dir=$(dirname "$source_file")
+            
+            # Construct cdt-cpp command with proper include paths
+            echo "Building $contract_name..."
+            echo "  Source: $source_file"
+            echo "  Output: $output_wasm"
+            echo "  Include dir: $contract_include_dir"
+            echo "  Resource dir: $contract_resource_dir"
+            
+            # Get the project root directory
+            local project_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+            
+            # Build with absolute paths to avoid any issues
+            echo "Building with contract name: $contract_name_for_build"
+            cdt-cpp -abigen \
+                   -I "$project_root/org/include" \
+                   -I "$contract_include_dir" \
+                   -R "$contract_resource_dir" \
+                   -contract "$contract_name_for_build" \
+                   -o "$output_wasm" \
+                   "$source_file"
+            
+            # Move the ABI file to the correct location if needed
+            local source_abi="${source_file%.*}.abi"
+            if [ -f "$source_abi" ] && [ "$(dirname "$source_abi")" != "$(dirname "$output_abi")" ]; then
+                mv "$source_abi" "$output_abi"
+            fi
             
             # Check if build succeeded by verifying output files exist
         fi # End of rebuild_needed check
@@ -327,31 +449,42 @@ deploy_contract() {
 }
 
 # --- Contract Build and Deploy Calls ---
-# Example structure: build_contract <contract_name>; deploy_contract <contract_file_base_name>
-# Ensure the <contract_file_base_name> matches the pattern used to derive the variable name in config.env
+# Function to build and deploy a contract if not in SKIP_CONTRACTS
+build_and_deploy() {
+    local contract=$1
+    if ! should_skip_contract "$contract"; then
+        build_contract "$contract"
+        deploy_contract "$contract"
+    else
+        echo "Skipping $contract (in SKIP_CONTRACTS)"
+    fi
+}
 
 # Core contracts
-build_contract org; deploy_contract org
-build_contract authority; deploy_contract authority
-build_contract badgedata; deploy_contract badgedata
-build_contract simplebadge; deploy_contract simplebadge
-build_contract subscription; deploy_contract subscription
+build_and_deploy org
+build_and_deploy authority
+build_and_deploy badgedata
+build_and_deploy simplebadge
+build_and_deploy subscription
 
 # Manager contracts
-build_contract simplemanager; deploy_contract simplemanager # Assuming simplemanager.cpp maps to SIMPLE_MANAGER_CONTRACT
-build_contract andemittermanager; deploy_contract andemittermanager
-build_contract boundedaggmanager; deploy_contract boundedaggmanager
+build_and_deploy aemanager
+build_and_deploy bamanager
+build_and_deploy bountmanager
+build_and_deploy simplemanager
+build_and_deploy andemitter
+build_and_deploy boundedagg
 
 # Feature contracts
-build_contract cumulative; deploy_contract cumulative
-build_contract statistics; deploy_contract statistics
-build_contract andemitter; deploy_contract andemitter
-build_contract boundedagg; deploy_contract boundedagg
-build_contract boundedstats; deploy_contract boundedstats
-build_contract requests; deploy_contract requests
-build_contract bounties; deploy_contract bounties
-build_contract govweight; deploy_contract govweight
-build_contract tokenstaker; deploy_contract tokenstaker
+build_and_deploy cumulative
+build_and_deploy statistics
+build_and_deploy boundedstats
+build_and_deploy requests
+build_and_deploy bounties
+
+# These will be skipped as they are in SKIP_CONTRACTS
+build_and_deploy govweight
+build_and_deploy tokenstaker
 
 # Need to determine the correct build/deploy names for these based on source files
 # build_contract ???; deploy_contract mutual_recognition_manager 

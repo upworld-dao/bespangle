@@ -21,24 +21,50 @@ build_local_contracts() {
         exit 1
     fi
 
-    echo "Starting incremental parallel contract builds using $(nproc) processes..."
-    find "${SRC_DIR}" -maxdepth 1 -type f -name '*.cpp' -print0 | xargs -0 -P $(nproc) -I {} bash -c '
-        cpp_file="{}"
-        contract_name=$(basename "${cpp_file}" .cpp)
-        wasm_file="./build/${contract_name}/${contract_name}.wasm"
-        abi_file="./build/${contract_name}/${contract_name}.abi"
+    # Function to build a single contract
+    build_single_contract() {
+        local cpp_file="$1"
+        local contract_name="$(basename "$cpp_file" .cpp)"
+        
+        # Use the same build directory as deploy.sh
+        local build_dir="${PROJECT_ROOT:-.}/build"
+        if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
+            build_dir="/workspace/build"  # Inside Docker container
+        fi
+        
+        local wasm_file="${build_dir}/${contract_name}/${contract_name}.wasm"
+        local abi_file="${build_dir}/${contract_name}/${contract_name}.abi"
+        local hpp_file="${SRC_DIR}/${contract_name}.hpp"
+        
+        # Ensure build directory exists
+        mkdir -p "${build_dir}/${contract_name}"
+        
+        echo "Building contract: $contract_name"
+        echo "  Source: $cpp_file"
+        echo "  Output: $wasm_file"
+
+        # Skip tokenstaker and govweight contracts
+        if [ "${contract_name}" = "tokenstaker" ] || [ "${contract_name}" = "govweight" ]; then
+            echo "Skipping ${contract_name}, not building."
+            return 0
+        fi
 
         # Robust timestamp logic for .cpp/.hpp and .wasm/.abi (macOS/Linux)
         # Always get integer mtime or fail if not possible
-        if cpp_mtime=$(stat -f "%m" "${cpp_file}" 2>/dev/null); then :; \
-        elif cpp_mtime=$(stat -c "%Y" "${cpp_file}" 2>/dev/null); then :; \
-        else echo "ERROR: Unable to get mtime for ${cpp_file}" >&2; exit 1; fi
+        local cpp_mtime hpp_mtime wasm_mtime=0 abi_mtime=0 latest_src_mtime
+        
+        if ! cpp_mtime=$(stat -f "%m" "${cpp_file}" 2>/dev/null) && \
+           ! cpp_mtime=$(stat -c "%Y" "${cpp_file}" 2>/dev/null); then
+            echo "ERROR: Unable to get mtime for ${cpp_file}" >&2
+            return 1
+        fi
 
-        hpp_file="${cpp_file%/*}/${contract_name}.hpp"
         if [ -f "$hpp_file" ]; then
-            if hpp_mtime=$(stat -f "%m" "$hpp_file" 2>/dev/null); then :; \
-            elif hpp_mtime=$(stat -c "%Y" "$hpp_file" 2>/dev/null); then :; \
-            else echo "ERROR: Unable to get mtime for $hpp_file" >&2; exit 1; fi
+            if ! hpp_mtime=$(stat -f "%m" "$hpp_file" 2>/dev/null) && \
+               ! hpp_mtime=$(stat -c "%Y" "$hpp_file" 2>/dev/null); then
+                echo "ERROR: Unable to get mtime for $hpp_file" >&2
+                return 1
+            fi
         else
             hpp_mtime=0
         fi
@@ -49,17 +75,20 @@ build_local_contracts() {
             latest_src_mtime=$hpp_mtime
         fi
 
-        wasm_mtime=0
-        abi_mtime=0
         if [ -f "$wasm_file" ]; then
-            if wasm_mtime=$(stat -f "%m" "$wasm_file" 2>/dev/null); then :; \
-            elif wasm_mtime=$(stat -c "%Y" "$wasm_file" 2>/dev/null); then :; \
-            else echo "ERROR: Unable to get mtime for $wasm_file" >&2; exit 1; fi
+            if ! wasm_mtime=$(stat -f "%m" "$wasm_file" 2>/dev/null) && \
+               ! wasm_mtime=$(stat -c "%Y" "$wasm_file" 2>/dev/null); then
+                echo "ERROR: Unable to get mtime for $wasm_file" >&2
+                return 1
+            fi
         fi
+        
         if [ -f "$abi_file" ]; then
-            if abi_mtime=$(stat -f "%m" "$abi_file" 2>/dev/null); then :; \
-            elif abi_mtime=$(stat -c "%Y" "$abi_file" 2>/dev/null); then :; \
-            else echo "ERROR: Unable to get mtime for $abi_file" >&2; exit 1; fi
+            if ! abi_mtime=$(stat -f "%m" "$abi_file" 2>/dev/null) && \
+               ! abi_mtime=$(stat -c "%Y" "$abi_file" 2>/dev/null); then
+                echo "ERROR: Unable to get mtime for $abi_file" >&2
+                return 1
+            fi
         fi
 
         # Only build if missing or out-of-date
@@ -69,28 +98,58 @@ build_local_contracts() {
         echo "  latest_src_mtime: $latest_src_mtime"
         echo "  wasm_mtime: $wasm_mtime"
         echo "  abi_mtime: $abi_mtime"
-        echo "  wasm exists? $( [ -f \"$wasm_file\" ] && echo yes || echo no )"
-        echo "  abi exists? $( [ -f \"$abi_file\" ] && echo yes || echo no )"
-        if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ] || [ "$latest_src_mtime" -gt "$wasm_mtime" ] || [ "$latest_src_mtime" -gt "$abi_mtime" ]; then
+        echo "  wasm exists? $( [ -f "$wasm_file" ] && echo yes || echo no )"
+        echo "  abi exists? $( [ -f "$abi_file" ] && echo yes || echo no )"
+        
+        if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ] || \
+           [ "$latest_src_mtime" -gt "$wasm_mtime" ] || [ "$latest_src_mtime" -gt "$abi_mtime" ]; then
             echo "Building: ${contract_name}..."
-            build_output=$(./deploy.sh -a build -t "${contract_name}" 2>&1)
-            exit_code=$?
-            if [ $exit_code -ne 0 ]; then
+            if ! build_output=$(./deploy.sh -a build -t "${contract_name}" 2>&1); then
                 echo "-------------------------------------------------" >&2
-                echo "ERROR: Build failed for contract ${contract_name} (exit code: $exit_code)." >&2
+                echo "ERROR: Build failed for contract ${contract_name} (exit code: $?)." >&2
                 echo "Output:" >&2
                 echo "$build_output" >&2
                 echo "-------------------------------------------------" >&2
-                exit 1
+                return 1
             fi
         else
             echo "Skipping ${contract_name}, up-to-date."
         fi
-    '
-
-    build_exit_code=$?
-    if [ $build_exit_code -ne 0 ]; then
-        echo "ERROR: One or more parallel builds failed. See error details above. Exiting."
+        return 0
+    }
+    
+    # Export the function so it's available in subshells
+    export -f build_single_contract
+    
+    # Get the list of .cpp files and process them in parallel
+    echo "Starting incremental parallel contract builds using $(nproc) processes..."
+    
+    # Create an array to store the PIDs of background processes
+    pids=()
+    
+    # Process each .cpp file
+    for cpp_file in "${SRC_DIR}"/*.cpp; do
+        [ -e "$cpp_file" ] || continue  # handle case with no .cpp files
+        
+        # Run the build in a subshell and store the PID
+        (
+            if ! build_single_contract "$cpp_file"; then
+                exit 1
+            fi
+        ) &
+        pids+=($!)
+    done
+    
+    # Wait for all background processes to complete and check their exit status
+    local build_failed=0
+    for pid in "${pids[@]}"; do
+        if ! wait "$pid"; then
+            build_failed=1
+        fi
+    done
+    
+    if [ "$build_failed" -ne 0 ]; then
+        echo "ERROR: One or more parallel builds failed. See error details above. Exiting." >&2
         exit 1
     fi
 
@@ -107,7 +166,29 @@ if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
 
     # Set paths relative to /workspace
     PROJECT_ROOT="/workspace"
-    CDT_ROOT="/usr/opt/cdt/4.1.0/" # Assume CDT location in container
+    export PATH="/usr/opt/cdt/4.1.0/bin:$PATH"
+    
+    # Ensure build directory exists
+    mkdir -p "${PROJECT_ROOT}/build"
+    
+    # Build all contracts
+    echo "--- Building all contracts ---"
+    cd "${PROJECT_ROOT}" || exit 1
+    
+    # Build contracts using the deploy script
+    if ! ./deploy.sh -a build; then
+        echo "ERROR: Failed to build contracts"
+        exit 1
+    fi
+    
+    # Verify contracts were built
+    if [ ! -f "${PROJECT_ROOT}/build/org/org.wasm" ] || [ ! -f "${PROJECT_ROOT}/build/org/org.abi" ]; then
+        echo "ERROR: Contract build failed - required files not found"
+        ls -la "${PROJECT_ROOT}/build/org/" 2>/dev/null || echo "Build directory not found"
+        exit 1
+    fi
+    
+    echo "--- Contracts built successfully ---"
 
     # 1. Ensure eosio.token is built
     SYS_CONTRACTS_DIR="${PROJECT_ROOT}/build/eos-system-contracts"
