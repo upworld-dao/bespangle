@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     cmake \
     make \
+    jq \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js 20 LTS (latest stable)

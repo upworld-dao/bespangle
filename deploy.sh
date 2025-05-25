@@ -30,20 +30,68 @@ VERBOSE=0
 # Path to build script
 BUILD_SCRIPT="./build.sh"
 
+# Function to get network from accounts filename
+get_network_from_file() {
+    local filename=$(basename "$1")
+    # Extract network name from filename (e.g., jungle4 from jungle4accounts.txt)
+    local network="${filename%accounts.txt*}"
+    # If no network prefix found, default to jungle4 for backward compatibility
+    if [ -z "$network" ] || [ "$network" = "accounts" ]; then
+        network="jungle4"
+    fi
+    echo "$network"
+}
+
+# Function to get endpoint for network
+get_network_endpoint() {
+    local network="$1"
+    local config_file="network_config.json"
+    
+    # Check if jq is available
+    if ! command -v jq &> /dev/null; then
+        echo "ERROR: jq is required but not installed" >&2
+        return 1
+    fi
+    
+    if [ ! -f "$config_file" ]; then
+        echo "ERROR: Network config file not found: $config_file" >&2
+        return 1
+    fi
+    
+    local endpoint=$(jq -r ".${network}.endpoint // empty" "$config_file" 2>/dev/null)
+    if [ -z "$endpoint" ]; then
+        echo "ERROR: No endpoint found for network: $network" >&2
+        return 1
+    fi
+    
+    echo "$endpoint"
+}
+
 # Function to load accounts from accounts file
 load_accounts() {
     local accounts_file="$1"
     if [ ! -f "$accounts_file" ]; then
-        echo "Accounts file not found: $accounts_file"
+        echo "Accounts file not found: $accounts_file" >&2
+        return 1
+    fi
+    
+    # Set network from accounts filename
+    NETWORK=$(get_network_from_file "$accounts_file")
+    
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo "Loading accounts from $accounts_file (network: $NETWORK)..."
+    fi
+    
+    # Get network endpoint
+    if ! NETWORK_ENDPOINT=$(get_network_endpoint "$NETWORK"); then
         return 1
     fi
     
     if [ "$VERBOSE" -eq 1 ]; then
-        echo "Loading accounts from $accounts_file..."
+        echo "Using network endpoint: $NETWORK_ENDPOINT"
     fi
     
     # Source the accounts file to load variables
-    # This is more compatible than using declare -g
     if [ "$VERBOSE" -eq 1 ]; then
         set -x
     fi
@@ -125,15 +173,17 @@ deploy_contract() {
         return 1
     fi
     
-    # Deploy the contract using cleos
-    echo "Deploying $contract to account $contract_account..."
+    # Deploy the contract using cleos with the network endpoint
+    echo "Deploying $contract to account $contract_account on $NETWORK..."
+    
+    local cleos_cmd="cleos -u $NETWORK_ENDPOINT set contract $contract_account $build_dir $wasm_file $abi_file -p $contract_account@active"
     
     if [ "$VERBOSE" -eq 1 ]; then
-        echo "Running: cleos set contract $contract_account $build_dir $wasm_file $abi_file -p $contract_account@active"
+        echo "Running: $cleos_cmd"
     fi
     
-    if ! cleos set contract "$contract_account" "$build_dir" "$wasm_file" "$abi_file" -p "$contract_account@active"; then
-        echo "ERROR: Failed to deploy $contract" >&2
+    if ! $cleos_cmd; then
+        echo "ERROR: Failed to deploy $contract to $NETWORK" >&2
         return 1
     fi
     
