@@ -77,7 +77,17 @@ RUN mkdir -p /home/developer/.config/git \
 COPY . /workspace/
 
 # Install Node.js dependencies for the tests
-RUN cd tests && npm install
+# First install as root to avoid permission issues
+USER root
+RUN cd tests && npm install --unsafe-perm
+
+# Change ownership of node_modules and package files to the non-root user
+RUN chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/node_modules \
+    && chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/package*.json \
+    && chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/package-lock.json
+
+# Switch back to non-root user for safety
+USER ${USER_ID}:${GROUP_ID}
 
 # Indicate that the container is ready (optional, can be removed)
 # CMD ["echo", "Antelope CDT & Node.js environment ready."]
