@@ -171,20 +171,13 @@ if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
     # Ensure build directory exists
     mkdir -p "${PROJECT_ROOT}/build"
     
-    # Build all contracts
+    # Build all contracts using the build script
     echo "--- Building all contracts ---"
     cd "${PROJECT_ROOT}" || exit 1
     
-    # Build contracts using the deploy script
-    if ! ./deploy.sh -a build; then
+    # Run the build script
+    if ! ./build.sh; then
         echo "ERROR: Failed to build contracts"
-        exit 1
-    fi
-    
-    # Verify contracts were built
-    if [ ! -f "${PROJECT_ROOT}/build/org/org.wasm" ] || [ ! -f "${PROJECT_ROOT}/build/org/org.abi" ]; then
-        echo "ERROR: Contract build failed - required files not found"
-        ls -la "${PROJECT_ROOT}/build/org/" 2>/dev/null || echo "Build directory not found"
         exit 1
     fi
     

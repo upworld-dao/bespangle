@@ -4,6 +4,54 @@ set -e
 # Ensure we're in the project root
 cd "$(dirname "$0")"
 
+# Default command to run if none specified
+DEFAULT_COMMAND="./run_tests.sh"
+
+# Parse command line arguments
+COMMAND="$DEFAULT_COMMAND"
+CLEAN_BUILD=false
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --clean)
+            CLEAN_BUILD=true
+            shift
+            ;;
+        --command=*)
+            COMMAND="${1#*=}"
+            shift
+            ;;
+        --help)
+            echo "Usage: $0 [options] [-- command [args...]]"
+            echo "Options:"
+            echo "  --clean          Clean build directory before running"
+            echo "  --command=CMD    Command to run in the container (default: $DEFAULT_COMMAND)"
+            echo "  --help           Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  $0 --clean"
+            echo "  $0 --command='./build.sh'"
+            echo "  $0 --command='./deploy.sh -a deploy'"
+            exit 0
+            ;;
+        --)
+            shift
+            COMMAND="$*"
+            break
+            ;;
+        *)
+            # If no --command= is specified but there are arguments, use them as the command
+            if [ "$COMMAND" = "$DEFAULT_COMMAND" ] && [ "$1" != "" ]; then
+                COMMAND="$*"
+                break
+            else
+                echo "Unknown option: $1"
+                exit 1
+            fi
+            ;;
+    esac
+done
+
 # Build the Docker image if not already built
 if ! docker image inspect bespangle-dev-env >/dev/null 2>&1; then
     echo "Building Docker image..."
@@ -18,12 +66,12 @@ GROUP_ID=$(id -g)
 mkdir -p "$(pwd)/build"
 chmod -R a+rw "$(pwd)/build"
 
-# Clean up any existing build artifacts
-echo "Cleaning previous build artifacts..."
-rm -rf "$(pwd)/build/"* 2>/dev/null || true
+# Clean up build artifacts if requested
+if [ "$CLEAN_BUILD" = true ]; then
+    echo "Cleaning build artifacts..."
+    rm -rf "$(pwd)/build/"* 2>/dev/null || true
+fi
 
-# Run the container with the project directory mounted
-echo "Running in Docker container..."
 # Create a temporary directory for the container's home
 export CONTAINER_HOME="/tmp/container_home_$USER_ID"
 mkdir -p "$CONTAINER_HOME"
@@ -35,7 +83,7 @@ cat > "$CONTAINER_HOME/.gitconfig" << 'EOL'
     directory = /workspace
 EOL
 
-echo "Running in Docker container..."
+echo "Running in Docker container: $COMMAND"
 docker run --rm -it \
     -v "$(pwd):/workspace" \
     -v "$CONTAINER_HOME:/home/developer" \
@@ -47,7 +95,7 @@ docker run --rm -it \
     -e GIT_CONFIG_NOSYSTEM=1 \
     --user "$USER_ID:$GROUP_ID" \
     bespangle-dev-env \
-    bash -c "chmod -R a+rw /workspace/build/ && ./run_tests.sh $@"
+    bash -c "chmod -R a+rw /workspace/build/ && $COMMAND"
 
 # Clean up the temporary directory
 rm -rf "$CONTAINER_HOME"

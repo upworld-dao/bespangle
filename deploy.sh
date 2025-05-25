@@ -1,9 +1,24 @@
 #!/bin/bash
 
 # Automated Antelope Smart Contract Deployment Script
-# This is a simplified version with basic parsing
+# This script handles deployment of contracts, using build.sh for building
+# MUST be run inside the Docker container
 
 set -e
+
+# If not running inside Docker, re-run inside Docker
+if [ "$BESPANGLE_IN_DOCKER" != "true" ]; then
+    # Get the script's directory and project root
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    cd "$SCRIPT_DIR"
+    
+    # Build the command with all arguments
+    CMD="./deploy.sh $@"
+    
+    # Run inside Docker
+    exec ./docker-run.sh --command="$CMD"
+    exit $?
+fi
 
 # Default values
 CONFIG_FILE="config.env"
@@ -12,8 +27,8 @@ ACTION="both"
 CONTRACTS="all"
 VERBOSE=0
 
-# List of contracts to skip
-SKIP_CONTRACTS=("tokenstaker" "govweight" "bountmanager")
+# Path to build script
+BUILD_SCRIPT="./build.sh"
 
 # Function to load accounts from accounts file
 load_accounts() {
@@ -90,12 +105,62 @@ build_contract() {
     fi
 }
 
+# Function to build contracts using the build script
+build_contracts() {
+    local contracts="$1"
+    local verbose_flag=""
+    
+    if [ "$VERBOSE" -eq 1 ]; then
+        verbose_flag="-v"
+    fi
+    
+    echo "Building contracts: $contracts"
+    if ! $BUILD_SCRIPT -t "$contracts" $verbose_flag; then
+        echo "ERROR: Failed to build contracts" >&2
+        return 1
+    fi
+    return 0
+}
+
 # Function to deploy a contract
 deploy_contract() {
     local contract=$1
+    local build_dir="build/${contract}"
+    local wasm_file="${build_dir}/${contract}.wasm"
+    local abi_file="${build_dir}/${contract}.abi"
+    
     echo "Deploying $contract..."
-    # Add your deploy command here
-    # For example: cleos set contract $CONTRACT_ACCOUNT $PWD -p $CONTRACT_ACCOUNT@active
+    
+    # Verify the contract was built
+    if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ]; then
+        echo "ERROR: Contract files not found for $contract" >&2
+        echo "Please build the contract first using: ./build.sh -t $contract" >&2
+        return 1
+    fi
+    
+    # Get the account name for this contract from config
+    local contract_account_var=$(echo "${contract}_account" | tr '[:lower:]' '[:upper:]')
+    local contract_account=${!contract_account_var}
+    
+    if [ -z "$contract_account" ]; then
+        echo "ERROR: No account configured for contract $contract" >&2
+        echo "Please set ${contract_account_var} in your config file" >&2
+        return 1
+    fi
+    
+    # Deploy the contract using cleos
+    echo "Deploying $contract to account $contract_account..."
+    
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo "Running: cleos set contract $contract_account $build_dir $wasm_file $abi_file -p $contract_account@active"
+    fi
+    
+    if ! cleos set contract "$contract_account" "$build_dir" "$wasm_file" "$abi_file" -p "$contract_account@active"; then
+        echo "ERROR: Failed to deploy $contract" >&2
+        return 1
+    fi
+    
+    echo "Successfully deployed $contract to $contract_account"
     return 0
 }
 
@@ -154,50 +219,17 @@ main() {
         exit 1
     fi
 
-    # Get list of contracts to process
-    local contracts_to_process=()
-    if [ "$CONTRACTS" = "all" ]; then
-        # Find all .cpp files in the src directory
-        for cpp_file in org/src/*.cpp; do
-            [ -f "$cpp_file" ] || continue
-            local contract=$(basename "$cpp_file" .cpp)
-            if should_skip_contract "$contract"; then
-                echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
-                continue
-            fi
-            contracts_to_process+=("$contract")
-        done
-    else
-        # Process only specified contracts, still respecting SKIP_CONTRACTS
-        IFS=',' read -ra requested_contracts <<< "$CONTRACTS"
-        for contract in "${requested_contracts[@]}"; do
-            if should_skip_contract "$contract"; then
-                echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
-                continue
-            fi
-            contracts_to_process+=("$contract")
-        done
-    fi
-    
-    if [ ${#contracts_to_process[@]} -eq 0 ]; then
-        echo "No contracts to process after applying filters"
-        exit 0
-    fi
-
     # Process the action
     case "$ACTION" in
         build)
-            echo "Building contracts: ${contracts_to_process[*]}"
-            for contract in "${contracts_to_process[@]}"; do
-                if ! build_contract "$contract"; then
-                    echo "ERROR: Failed to build $contract" >&2
-                    exit 1
-                fi
-            done
+            if ! build_contracts "$CONTRACTS"; then
+                exit 1
+            fi
             ;;
         deploy)
-            echo "Deploying contracts: ${contracts_to_process[*]}"
-            for contract in "${contracts_to_process[@]}"; do
+            # Convert comma-separated list to array for processing
+            IFS=',' read -ra contracts_to_deploy <<< "$CONTRACTS"
+            for contract in "${contracts_to_deploy[@]}"; do
                 if ! deploy_contract "$contract"; then
                     echo "ERROR: Failed to deploy $contract" >&2
                     exit 1
@@ -205,12 +237,12 @@ main() {
             done
             ;;
         both)
-            echo "Building and deploying contracts: ${contracts_to_process[*]}"
-            for contract in "${contracts_to_process[@]}"; do
-                if ! build_contract "$contract"; then
-                    echo "ERROR: Failed to build $contract" >&2
-                    exit 1
-                fi
+            if ! build_contracts "$CONTRACTS"; then
+                exit 1
+            fi
+            # Convert comma-separated list to array for processing
+            IFS=',' read -ra contracts_to_deploy <<< "$CONTRACTS"
+            for contract in "${contracts_to_deploy[@]}"; do
                 if ! deploy_contract "$contract"; then
                     echo "ERROR: Failed to deploy $contract" >&2
                     exit 1
