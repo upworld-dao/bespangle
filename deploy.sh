@@ -76,35 +76,6 @@ print_usage() {
     echo "  -h, --help      Display this help message"
 }
 
-# Function to build a contract
-build_contract() {
-    local contract=$1
-    local src_dir="org/src"
-    local build_dir="build/${contract}"
-    
-    echo "Building $contract..."
-    
-    # Create build directory if it doesn't exist
-    mkdir -p "$build_dir"
-    
-    # Compile the contract using cdt-cpp from the Docker container
-    if cdt-cpp -abigen \
-        -I "${src_dir}" \
-        -I "/workspace/org/include" \
-        -I "/workspace/org/external" \
-        -R "${src_dir}/ricardian" \
-        -contract "${contract}" \
-        -o "${build_dir}/${contract}.wasm" \
-        "${src_dir}/${contract}.cpp"; then
-        
-        echo "Successfully built $contract"
-        return 0
-    else
-        echo "ERROR: Failed to build $contract" >&2
-        return 1
-    fi
-}
-
 # Function to build contracts using the build script
 build_contracts() {
     local contracts="$1"
@@ -125,7 +96,13 @@ build_contracts() {
 # Function to deploy a contract
 deploy_contract() {
     local contract=$1
+    # Handle both local and container paths
     local build_dir="build/${contract}"
+    # Check if we're in the container (where /workspace is the working dir)
+    if [ -d "/workspace" ]; then
+        build_dir="/workspace/${build_dir}"
+    fi
+    
     local wasm_file="${build_dir}/${contract}.wasm"
     local abi_file="${build_dir}/${contract}.abi"
     
@@ -227,8 +204,37 @@ main() {
             fi
             ;;
         deploy)
-            # Convert comma-separated list to array for processing
-            IFS=',' read -ra contracts_to_deploy <<< "$CONTRACTS"
+            # Get list of contracts to deploy
+            local contracts_to_deploy=()
+            if [ "$CONTRACTS" = "all" ]; then
+                # Find all .cpp files in the src directory (matching build.sh behavior)
+                for cpp_file in org/src/*.cpp; do
+                    [ -f "$cpp_file" ] || continue
+                    local contract=$(basename "$cpp_file" .cpp)
+                    if should_skip_contract "$contract"; then
+                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
+                        continue
+                    fi
+                    contracts_to_deploy+=("$contract")
+                done
+            else
+                # Process only specified contracts, still respecting SKIP_CONTRACTS
+                IFS=',' read -ra requested_contracts <<< "$CONTRACTS"
+                for contract in "${requested_contracts[@]}"; do
+                    if should_skip_contract "$contract"; then
+                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
+                        continue
+                    fi
+                    contracts_to_deploy+=("$contract")
+                done
+            fi
+            
+            if [ ${#contracts_to_deploy[@]} -eq 0 ]; then
+                echo "No contracts to deploy after applying filters"
+                exit 0
+            fi
+            
+            echo "Deploying contracts: ${contracts_to_deploy[*]}"
             for contract in "${contracts_to_deploy[@]}"; do
                 if ! deploy_contract "$contract"; then
                     echo "ERROR: Failed to deploy $contract" >&2
@@ -236,12 +242,42 @@ main() {
                 fi
             done
             ;;
+            
         both)
+            # First build all contracts
             if ! build_contracts "$CONTRACTS"; then
                 exit 1
             fi
-            # Convert comma-separated list to array for processing
-            IFS=',' read -ra contracts_to_deploy <<< "$CONTRACTS"
+            
+            # Then deploy using the same contract list logic as above
+            local contracts_to_deploy=()
+            if [ "$CONTRACTS" = "all" ]; then
+                for cpp_file in org/src/*.cpp; do
+                    [ -f "$cpp_file" ] || continue
+                    local contract=$(basename "$cpp_file" .cpp)
+                    if should_skip_contract "$contract"; then
+                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
+                        continue
+                    fi
+                    contracts_to_deploy+=("$contract")
+                done
+            else
+                IFS=',' read -ra requested_contracts <<< "$CONTRACTS"
+                for contract in "${requested_contracts[@]}"; do
+                    if should_skip_contract "$contract"; then
+                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
+                        continue
+                    fi
+                    contracts_to_deploy+=("$contract")
+                done
+            fi
+            
+            if [ ${#contracts_to_deploy[@]} -eq 0 ]; then
+                echo "No contracts to deploy after applying filters"
+                exit 0
+            fi
+            
+            echo "Deploying contracts: ${contracts_to_deploy[*]}"
             for contract in "${contracts_to_deploy[@]}"; do
                 if ! deploy_contract "$contract"; then
                     echo "ERROR: Failed to deploy $contract" >&2

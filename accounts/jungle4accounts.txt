@@ -1,38 +1,45 @@
-SIMPLE_MANAGER_CONTRACT="simmanagedev"
+SIMPLE_MANAGER_ACCOUNT="simmanagedev"
 
-MUTUAL_RECOGNITION_MANAGER_CONTRACT="mrmanagerdev"
+MUTUAL_RECOGNITION_MANAGER_ACCOUNT="mrmanagerdev"
 
-ORCHESTRATOR_MANAGER_CONTRACT="orchmanagdev"
+ORCHESTRATOR_MANAGER_ACCOUNT="orchmanagdev"
 
-ANDEMITTER_MANAGER_CONTRACT="aemanagerdev"
+AEMANAGER_ACCOUNT="aemanagerdev"
 
-BOUNDED_AGG_MANAGER_CONTRACT="bamanagerdev"
+BOUNDED_AGG_MANAGER_ACCOUNT="bamanagerdev"
 
-GIVER_REP_MANAGER_CONTRACT="grmanagerdev"
+GIVER_REP_MANAGER_ACCOUNT="grmanagerdev"
 
-HLL_EMITTER_MANAGER_CONTRACT="hllmanagedev"
+HLL_EMITTER_MANAGER_ACCOUNT="hllmanagedev"
 
-ORG_CONTRACT="organizatdev"
-AUTHORITY_CONTRACT="authoritydev"
+ORG_ACCOUNT="organizatdev"
 
-SIMPLEBADGE_CONTRACT="simplebaddev"
-MUTUAL_RECOGNITION_CONTRACT="mrbadgedevde"
+AUTHORITY_ACCOUNT="authoritydev"
 
-BADGEDATA_CONTRACT="badgedatadev"
+SIMPLEBADGE_ACCOUNT="simplebaddev"
 
-CUMULATIVE_CONTRACT="cumulativdev"
-STATISTICS_CONTRACT="statisticdev"
+MUTUAL_RECOGNITION_ACCOUNT="mrbadgedevde"
 
-ANDEMITTER_CONTRACT="andemittedev"
+BADGEDATA_ACCOUNT="badgedatadev"
 
-BOUNDED_AGG_CONTRACT="boundedagdev"
-BOUNDED_STATS_CONTRACT="boundedstdev"
+CUMULATIVE_ACCOUNT="cumulativdev"
 
-HLL_EMITTER_CONTRACT="hllemittedev"
-GIVER_REP_CONTRACT="giverrepudev"
-BOUNDED_HLL_CONTRACT="boundedhldev"
+STATISTICS_ACCOUNT="statisticdev"
 
-SUBSCRIPTION_CONTRACT="subscribedev"
+ANDEMITTER_ACCOUNT="andemittedev"
 
-REQUESTS_CONTRACT="requestsdevd"
-BOUNTIES_CONTRACT="bountiesdevd"
+BOUNDED_AGG_ACCOUNT="boundedagdev"
+
+BOUNDED_STATS_ACCOUNT="boundedstdev"
+
+HLL_EMITTER_ACCOUNT="hllemittedev"
+
+GIVER_REP_ACCOUNT="giverrepudev"
+
+BOUNDED_HLL_ACCOUNT="boundedhldev"
+
+SUBSCRIPTION_ACCOUNT="subscribedev"
+
+REQUESTS_ACCOUNT="requestsdevd"
+
+BOUNTIES_ACCOUNT="bountiesdevd"
