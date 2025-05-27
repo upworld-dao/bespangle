@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Automated Antelope Smart Contract Deployment Script
-# This script handles deployment of contracts, using build.sh for building
+# This script handles building and deploying contracts to a specified network
 # MUST be run inside the Docker container
 
 set -e
@@ -21,31 +21,29 @@ if [ "$BESPANGLE_IN_DOCKER" != "true" ]; then
 fi
 
 # Default values
-CONFIG_FILE="config.env"
-ACCOUNTS_FILE="accounts/jungle4accounts.txt"
+NETWORK_CONFIG="network_config.json"
 ACTION="both"
 CONTRACTS="all"
 VERBOSE=0
+NETWORK=""
 
 # Path to build script
 BUILD_SCRIPT="./build.sh"
 
-# Function to get network from accounts filename
-get_network_from_file() {
-    local filename=$(basename "$1")
-    # Extract network name from filename (e.g., jungle4 from jungle4accounts.txt)
-    local network="${filename%accounts.txt*}"
-    # If no network prefix found, default to jungle4 for backward compatibility
-    if [ -z "$network" ] || [ "$network" = "accounts" ]; then
-        network="jungle4"
-    fi
-    echo "$network"
+# Function to display usage information
+print_usage() {
+    echo "Usage: $0 -n NETWORK [options]"
+    echo "Options:"
+    echo "  -n, --network NETWORK    Target network (e.g., jungle4, mainnet)"
+    echo "  -c, --contracts CONTRACTS  Comma-separated list of contracts to deploy (default: all)"
+    echo "  -a, --action ACTION      Action: build, deploy, or both (default: both)"
+    echo "  -v, --verbose           Enable verbose output"
+    echo "  -h, --help              Show this help message"
 }
 
-# Function to get endpoint for network
-get_network_endpoint() {
+# Function to load network configuration
+load_network_config() {
     local network="$1"
-    local config_file="network_config.json"
     
     # Check if jq is available
     if ! command -v jq &> /dev/null; then
@@ -53,58 +51,53 @@ get_network_endpoint() {
         return 1
     fi
     
-    if [ ! -f "$config_file" ]; then
-        echo "ERROR: Network config file not found: $config_file" >&2
+    if [ ! -f "$NETWORK_CONFIG" ]; then
+        echo "ERROR: Network config file not found: $NETWORK_CONFIG" >&2
         return 1
     fi
     
-    local endpoint=$(jq -r ".${network}.endpoint // empty" "$config_file" 2>/dev/null)
-    if [ -z "$endpoint" ]; then
-        echo "ERROR: No endpoint found for network: $network" >&2
+    # Load network config
+    local config_data
+    if ! config_data=$(jq -r ".networks.${network} // empty" "$NETWORK_CONFIG" 2>/dev/null); then
+        echo "ERROR: Failed to parse network config" >&2
         return 1
     fi
     
-    echo "$endpoint"
-}
-
-# Function to load accounts from accounts file
-load_accounts() {
-    local accounts_file="$1"
-    if [ ! -f "$accounts_file" ]; then
-        echo "Accounts file not found: $accounts_file" >&2
+    if [ -z "$config_data" ]; then
+        echo "ERROR: No configuration found for network: $network" >&2
         return 1
     fi
     
-    # Set network from accounts filename
-    NETWORK=$(get_network_from_file "$accounts_file")
+    # Export network config
+    export NETWORK_ENDPOINT=$(echo "$config_data" | jq -r '.endpoint')
+    export CHAIN_ID=$(echo "$config_data" | jq -r '.chain_id')
+    export SYSTEM_SYMBOL=$(echo "$config_data" | jq -r '.system_symbol')
+    export SYSTEM_CONTRACT=$(echo "$config_data" | jq -r '.system_contract')
     
-    if [ "$VERBOSE" -eq 1 ]; then
-        echo "Loading accounts from $accounts_file (network: $NETWORK)..."
+    # Export accounts as environment variables
+    local accounts=$(echo "$config_data" | jq -r '.accounts | to_entries[] | "export \(.key | ascii_upcase)=\"\(.value)\""')
+    if [ -n "$accounts" ]; then
+        eval "$accounts"
     fi
     
-    # Get network endpoint
-    if ! NETWORK_ENDPOINT=$(get_network_endpoint "$NETWORK"); then
-        return 1
-    fi
-    
     if [ "$VERBOSE" -eq 1 ]; then
-        echo "Using network endpoint: $NETWORK_ENDPOINT"
-    fi
-    
-    # Source the accounts file to load variables
-    if [ "$VERBOSE" -eq 1 ]; then
-        set -x
-    fi
-    . "$accounts_file"
-    if [ "$VERBOSE" -eq 1 ]; then
-        set +x
+        echo "=== Network Configuration ==="
+        echo "Network: $network"
+        echo "Endpoint: $NETWORK_ENDPOINT"
+        echo "Chain ID: $CHAIN_ID"
+        echo "System Symbol: $SYSTEM_SYMBOL"
+        echo "System Contract: $SYSTEM_CONTRACT"
+        echo ""
+        echo "=== Contract Accounts ==="
+        echo "$accounts" | sed 's/export //g'
+        echo "=========================="
     fi
 }
 
 # Function to check if a contract should be skipped
 should_skip_contract() {
     local contract=$1
-    for skip_contract in "${SKIP_CONTRACTS[@]}"; do
+    for skip_contract in "${SKIP_CONTRACTS[@]-}"; do
         if [ "$contract" = "$skip_contract" ]; then
             return 0  # Return true (0) if contract should be skipped
         fi
@@ -112,41 +105,21 @@ should_skip_contract() {
     return 1  # Return false (1) if contract should be processed
 }
 
-# Function to display usage information
-print_usage() {
-    echo "Usage: $0 [options]"
-    echo "Options:"
-    echo "  -c, --config    Configuration file (default: config.env)"
-    echo "  -f, --accounts  Accounts mapping file (default: accounts/jungle4accounts.txt)"
-    echo "  -a, --action    Action to perform: build, deploy, or both (default: both)"
-    echo "  -t, --target    Comma-separated list of contracts to target (default: all)"
-    echo "  -v, --verbose   Enable verbose output"
-    echo "  -h, --help      Display this help message"
-}
-
-# Function to build contracts using the build script
-build_contracts() {
-    local contracts="$1"
-    local verbose_flag=""
-    
-    if [ "$VERBOSE" -eq 1 ]; then
-        verbose_flag="-v"
-    fi
-    
-    echo "Building contracts: $contracts"
-    if ! $BUILD_SCRIPT -t "$contracts" $verbose_flag; then
-        echo "ERROR: Failed to build contracts" >&2
-        return 1
-    fi
-    return 0
-}
-
 # Function to deploy a contract
 deploy_contract() {
     local contract=$1
+    
+    # Get the account name for this contract from environment variables
+    local account_var=$(echo "${contract}" | tr '[:lower:]' '[:upper:]')
+    local account=${!account_var}
+    
+    if [ -z "$account" ]; then
+        echo "ERROR: No account configured for contract: $contract" >&2
+        return 1
+    fi
+    
     # Handle both local and container paths
     local build_dir="build/${contract}"
-    # Check if we're in the container (where /workspace is the working dir)
     if [ -d "/workspace" ]; then
         build_dir="/workspace/${build_dir}"
     fi
@@ -159,35 +132,55 @@ deploy_contract() {
     # Verify the contract was built
     if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ]; then
         echo "ERROR: Contract files not found for $contract" >&2
-        echo "Please build the contract first using: ./build.sh -t $contract" >&2
-        return 1
-    fi
-    
-    # Get the account name for this contract from config
-    local contract_account_var=$(echo "${contract}_account" | tr '[:lower:]' '[:upper:]')
-    local contract_account=${!contract_account_var}
-    
-    if [ -z "$contract_account" ]; then
-        echo "ERROR: No account configured for contract $contract" >&2
-        echo "Please set ${contract_account_var} in your config file" >&2
+        echo "Please build the contract first using: ./build.sh --target $contract" >&2
         return 1
     fi
     
     # Deploy the contract using cleos with the network endpoint
-    echo "Deploying $contract to account $contract_account on $NETWORK..."
+    echo "Deploying $contract to account $account on $NETWORK..."
     
-    local cleos_cmd="cleos -u $NETWORK_ENDPOINT set contract $contract_account $build_dir $wasm_file $abi_file -p $contract_account@active"
+    local cleos_cmd="cleos -u $NETWORK_ENDPOINT set contract $account $build_dir $wasm_file $abi_file -p $account@active"
     
     if [ "$VERBOSE" -eq 1 ]; then
         echo "Running: $cleos_cmd"
     fi
     
-    if ! $cleos_cmd; then
+    # Create a temporary file to capture command output
+    local temp_output=$(mktemp)
+    
+    # Run the command and capture both stdout and stderr
+    if ! $cleos_cmd > "$temp_output" 2>&1; then
         echo "ERROR: Failed to deploy $contract to $NETWORK" >&2
+        echo "Command: $cleos_cmd" >&2
+        echo "Output:" >&2
+        cat "$temp_output" >&2
+        rm -f "$temp_output"
+        
+        # Additional diagnostics
+        echo "\nDiagnostic information:" >&2
+        echo "- Network endpoint: $NETWORK_ENDPOINT" >&2
+        echo "- Account: $account" >&2
+        echo "- Build directory: $build_dir" >&2
+        echo "- WASM file exists: $(if [ -f "$wasm_file" ]; then echo "yes"; else echo "no"; fi)" >&2
+        echo "- ABI file exists: $(if [ -f "$abi_file" ]; then echo "yes"; else echo "no"; fi)" >&2
+        
+        # Check if keosd is running
+        if ! pgrep -x "keosd" > /dev/null; then
+            echo "- keosd is not running" >&2
+        else
+            echo "- keosd is running" >&2
+        fi
+        
         return 1
     fi
     
-    echo "Successfully deployed $contract to $contract_account"
+    # If we get here, the command succeeded - show the output if verbose
+    if [ "$VERBOSE" -eq 1 ]; then
+        cat "$temp_output"
+    fi
+    rm -f "$temp_output"
+    
+    echo "Successfully deployed $contract to $account"
     return 0
 }
 
@@ -195,21 +188,17 @@ deploy_contract() {
 main() {
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
-        case "$1" in
-            -c|--config)
-                CONFIG_FILE="$2"
+        case $1 in
+            -n|--network)
+                NETWORK="$2"
                 shift 2
                 ;;
-            -f|--accounts)
-                ACCOUNTS_FILE="$2"
+            -c|--contracts)
+                CONTRACTS="$2"
                 shift 2
                 ;;
             -a|--action)
                 ACTION="$2"
-                shift 2
-                ;;
-            -t|--target)
-                CONTRACTS="$2"
                 shift 2
                 ;;
             -v|--verbose)
@@ -221,128 +210,81 @@ main() {
                 exit 0
                 ;;
             *)
-                echo "Unknown option: $1"
+                echo "ERROR: Unknown option: $1" >&2
                 print_usage
                 exit 1
                 ;;
         esac
     done
-
-    # Check that the config file exists
-    if [ ! -f "$CONFIG_FILE" ]; then
-        echo "Error: Configuration file not found at '$CONFIG_FILE'"
-        exit 2
-    fi
-
-    # Load accounts from the accounts file
-    if [ -n "$ACCOUNTS_FILE" ]; then
-        if [ ! -f "$ACCOUNTS_FILE" ]; then
-            echo "Error: Accounts file not found: $ACCOUNTS_FILE"
-            exit 1
-        fi
-        load_accounts "$ACCOUNTS_FILE"
-    else
-        echo "Error: No accounts file specified"
+    
+    # Validate required parameters
+    if [ -z "$NETWORK" ]; then
+        echo "ERROR: Network must be specified with -n or --network" >&2
+        print_usage
         exit 1
     fi
-
-    # Process the action
-    case "$ACTION" in
-        build)
-            if ! build_contracts "$CONTRACTS"; then
-                exit 1
-            fi
-            ;;
-        deploy)
-            # Get list of contracts to deploy
-            local contracts_to_deploy=()
-            if [ "$CONTRACTS" = "all" ]; then
-                # Find all .cpp files in the src directory (matching build.sh behavior)
-                for cpp_file in org/src/*.cpp; do
-                    [ -f "$cpp_file" ] || continue
-                    local contract=$(basename "$cpp_file" .cpp)
-                    if should_skip_contract "$contract"; then
-                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
-                        continue
-                    fi
-                    contracts_to_deploy+=("$contract")
-                done
-            else
-                # Process only specified contracts, still respecting SKIP_CONTRACTS
-                IFS=',' read -ra requested_contracts <<< "$CONTRACTS"
-                for contract in "${requested_contracts[@]}"; do
-                    if should_skip_contract "$contract"; then
-                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
-                        continue
-                    fi
-                    contracts_to_deploy+=("$contract")
-                done
-            fi
-            
-            if [ ${#contracts_to_deploy[@]} -eq 0 ]; then
-                echo "No contracts to deploy after applying filters"
-                exit 0
-            fi
-            
-            echo "Deploying contracts: ${contracts_to_deploy[*]}"
-            for contract in "${contracts_to_deploy[@]}"; do
-                if ! deploy_contract "$contract"; then
-                    echo "ERROR: Failed to deploy $contract" >&2
-                    exit 1
-                fi
-            done
-            ;;
-            
-        both)
-            # First build all contracts
-            if ! build_contracts "$CONTRACTS"; then
-                exit 1
-            fi
-            
-            # Then deploy using the same contract list logic as above
-            local contracts_to_deploy=()
-            if [ "$CONTRACTS" = "all" ]; then
-                for cpp_file in org/src/*.cpp; do
-                    [ -f "$cpp_file" ] || continue
-                    local contract=$(basename "$cpp_file" .cpp)
-                    if should_skip_contract "$contract"; then
-                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
-                        continue
-                    fi
-                    contracts_to_deploy+=("$contract")
-                done
-            else
-                IFS=',' read -ra requested_contracts <<< "$CONTRACTS"
-                for contract in "${requested_contracts[@]}"; do
-                    if should_skip_contract "$contract"; then
-                        echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
-                        continue
-                    fi
-                    contracts_to_deploy+=("$contract")
-                done
-            fi
-            
-            if [ ${#contracts_to_deploy[@]} -eq 0 ]; then
-                echo "No contracts to deploy after applying filters"
-                exit 0
-            fi
-            
-            echo "Deploying contracts: ${contracts_to_deploy[*]}"
-            for contract in "${contracts_to_deploy[@]}"; do
-                if ! deploy_contract "$contract"; then
-                    echo "ERROR: Failed to deploy $contract" >&2
-                    exit 1
-                fi
-            done
-            ;;
-        *)
-            echo "Error: Invalid action: $ACTION"
-            print_usage
+    
+    # Load network configuration
+    if ! load_network_config "$NETWORK"; then
+        exit 1
+    fi
+    
+    # Check current branch for informational purposes only
+    local current_branch
+    current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    echo "INFO: Deploying to $NETWORK from branch: $current_branch"
+    
+    # Determine which contracts to process
+    local contracts_to_process=()
+    if [ "$CONTRACTS" = "all" ]; then
+        # Get all contract names from the accounts section
+        contracts_to_process=($(jq -r ".networks.${NETWORK}.accounts | keys[]" "$NETWORK_CONFIG" 2>/dev/null))
+        if [ ${#contracts_to_process[@]} -eq 0 ]; then
+            echo "ERROR: No contracts found for network: $NETWORK" >&2
             exit 1
-            ;;
-    esac
-
-    echo "Script completed successfully."
+        fi
+    else
+        # Convert comma-separated list to array
+        IFS=',' read -r -a contracts_to_process <<< "$CONTRACTS"
+    fi
+    
+    # Process each contract
+    for contract in "${contracts_to_process[@]}"; do
+        contract=$(echo "$contract" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+        
+        # Check if contract should be skipped
+        if should_skip_contract "$contract"; then
+            echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
+            continue
+        fi
+        
+        case "$ACTION" in
+            build)
+                echo "=== Building $contract ==="
+                $BUILD_SCRIPT -t "$contract"
+                ;;
+            deploy)
+                echo "=== Deploying $contract ==="
+                deploy_contract "$contract"
+                ;;
+            both)
+                echo "=== Building and Deploying $contract ==="
+                if $BUILD_SCRIPT -t "$contract"; then
+                    deploy_contract "$contract"
+                else
+                    echo "ERROR: Failed to build $contract" >&2
+                    exit 1
+                fi
+                ;;
+            *)
+                echo "ERROR: Invalid action: $ACTION" >&2
+                print_usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    echo "=== Deployment to $NETWORK network complete! ==="
 }
 
 # Run the main function

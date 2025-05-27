@@ -43,10 +43,43 @@ build_local_contracts() {
         echo "  Source: $cpp_file"
         echo "  Output: $wasm_file"
 
-        # Skip tokenstaker and govweight contracts
-        if [ "${contract_name}" = "tokenstaker" ] || [ "${contract_name}" = "govweight" ]; then
-            echo "Skipping ${contract_name}, not building."
-            return 0
+        # Source the build script to use its should_skip_contract function
+        if [ -f "${PROJECT_ROOT}/build.sh" ]; then
+            # Define the function directly to avoid sourcing the entire script
+            should_skip_contract() {
+                local contract=$1
+                
+                # Load skip_contracts from network_config.json
+                local skip_contracts=()
+                if [ -f "${PROJECT_ROOT}/network_config.json" ]; then
+                    # Use jq to safely extract the skip_contracts array
+                    if command -v jq &> /dev/null; then
+                        while IFS= read -r skip_contract; do
+                            skip_contracts+=("$skip_contract")
+                        done < <(jq -r '.skip_contracts[]?' "${PROJECT_ROOT}/network_config.json" 2>/dev/null)
+                    fi
+                fi
+                
+                # Also include hardcoded defaults for backward compatibility
+                local default_skip_contracts=("tokenstaker" "govweight" "bountmanager")
+                
+                # Check against both sources
+                for skip_contract in "${skip_contracts[@]}" "${default_skip_contracts[@]}"; do
+                    if [ "$contract" = "$skip_contract" ]; then
+                        echo "Skipping $contract (in skip list)"
+                        return 0  # Return true (0) if contract should be skipped
+                    fi
+                done
+                
+                return 1  # Return false (1) if contract should be processed
+            }
+            
+            # Use the shared should_skip_contract function
+            if should_skip_contract "${contract_name}"; then
+                return 0
+            fi
+        else
+            echo "WARNING: build.sh not found, cannot check skip list for ${contract_name}"
         fi
 
         # Robust timestamp logic for .cpp/.hpp and .wasm/.abi (macOS/Linux)

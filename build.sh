@@ -24,17 +24,32 @@ fi
 CONTRACTS="all"
 VERBOSE=0
 
-# List of contracts to skip
-SKIP_CONTRACTS=("tokenstaker" "govweight" "bountmanager")
-
 # Function to check if a contract should be skipped
 should_skip_contract() {
     local contract=$1
-    for skip_contract in "${SKIP_CONTRACTS[@]}"; do
+    
+    # Load skip_contracts from network_config.json
+    local skip_contracts=()
+    if [ -f "network_config.json" ]; then
+        # Use jq to safely extract the skip_contracts array
+        if command -v jq &> /dev/null; then
+            while IFS= read -r skip_contract; do
+                skip_contracts+=("$skip_contract")
+            done < <(jq -r '.skip_contracts[]?' network_config.json 2>/dev/null)
+        fi
+    fi
+    
+    # Also include hardcoded defaults for backward compatibility
+    local default_skip_contracts=("tokenstaker" "govweight" "bountmanager")
+    
+    # Check against both sources
+    for skip_contract in "${skip_contracts[@]}" "${default_skip_contracts[@]}"; do
         if [ "$contract" = "$skip_contract" ]; then
+            echo "Skipping $contract (in skip list)"
             return 0  # Return true (0) if contract should be skipped
         fi
     done
+    
     return 1  # Return false (1) if contract should be processed
 }
 
