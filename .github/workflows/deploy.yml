@@ -93,16 +93,24 @@ jobs:
           # Get the network from the previous step
           NETWORK="${{ steps.network.outputs.network }}"
           
-          # Run the deployment in Docker with proper environment variables
+          # Ensure the build directory exists with correct permissions
+          mkdir -p build
+          chmod -R 777 build
+          
+          # Run the deployment in Docker with proper environment variables and user mapping
           if ! docker run --rm \
             -e BESPANGLE_IN_DOCKER=true \
             -e GITHUB_WORKSPACE=/github/workspace \
             -e NETWORK="$NETWORK" \
             -e DEPLOYER_PRIVATE_KEY="${{ secrets.DEPLOYER_PRIVATE_KEY }}" \
+            -e USER_ID=$(id -u) \
+            -e GROUP_ID=$(id -g) \
             -v "$GITHUB_WORKSPACE:/github/workspace" \
+            -v "$GITHUB_WORKSPACE/build:/github/workspace/build" \
             -w /github/workspace \
+            --user "root" \
             bespangle-dev-env \
-            ./deploy.sh --network "$NETWORK" --action both; then
+            bash -c "chown -R $(id -u):$(id -g) /github/workspace/build && chmod -R 777 /github/workspace/build && ./deploy.sh --network \"$NETWORK\" --action both"; then
             echo "❌ Deployment failed"
             exit 1
           fi
