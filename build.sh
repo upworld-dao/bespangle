@@ -61,8 +61,12 @@ build_contract() {
     
     echo "Building $contract..."
     
-    # Create build directory if it doesn't exist
+    # Create build directory with proper permissions if it doesn't exist
     mkdir -p "$build_dir"
+    chmod 775 "$build_dir" 2>/dev/null || true
+    
+    # Ensure the directory is owned by the current user
+    chown -R $(id -u):$(id -g) "$build_dir" 2>/dev/null || true
     
     # Compile the contract using cdt-cpp from the Docker container
     if cdt-cpp -abigen \

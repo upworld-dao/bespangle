@@ -402,8 +402,11 @@ main() {
     if [ ! -d "build" ]; then
         echo "Creating build directory..."
         mkdir -p build || { echo "Failed to create build directory"; exit 1; }
-        chmod 777 build || { echo "Failed to set permissions on build directory"; exit 1; }
+        chmod 775 build || { echo "Failed to set permissions on build directory"; exit 1; }
     fi
+    
+    # Ensure the build directory is owned by the current user
+    chown -R $(id -u):$(id -g) build 2>/dev/null || true
     
     # Process each contract
     local success_count=0
