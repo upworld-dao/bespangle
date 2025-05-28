@@ -384,14 +384,12 @@ setup_wallet() {
 
 # Function to clean up keosd process
 cleanup_keosd() {
-    local exit_code=${1:-$?}  # Allow passing exit code as parameter
-    echo "=== Starting cleanup_keosd (exit_code: $exit_code) ==="
-    if [ -n "$KESOD_PID" ]; then
-        echo "Stopping keosd process (PID: $KESOD_PID)..."
-        kill $KESOD_PID 2>/dev/null || echo "Warning: Failed to stop keosd"
-        unset KESOD_PID
-    fi
-    echo "=== Finished cleanup_keosd ==="
+    local exit_code=$1
+    
+    echo -e "\nCleaning up keosd process..."
+    pkill -f "keosd" || true
+    
+    # Always return the original exit code
     return $exit_code
 }
 
@@ -520,7 +518,7 @@ main() {
         
         # Check if contract should be skipped
         if should_skip_contract "$contract"; then
-            echo -e "\n⚠️  Skipping contract: $contract (in SKIP_CONTRACTS)"
+            echo -e "\n Skipping contract: $contract (in SKIP_CONTRACTS)"
             ((skipped_count++))
             continue
         fi
@@ -528,12 +526,12 @@ main() {
         # Process based on action
         case "$ACTION" in
             build)
-                echo -e "\n🔨 Building $contract..."
+                echo -e "\n Building $contract..."
                 if $BUILD_SCRIPT -t "$contract"; then
-                    echo "✅ Successfully built $contract"
+                    echo " Successfully built $contract"
                     ((success_count++))
                 else
-                    echo "❌ Failed to build $contract" >&2
+                    echo " Failed to build $contract" >&2
                     ((fail_count++))
                     # Continue to next contract instead of exiting
                 fi
@@ -541,29 +539,29 @@ main() {
                 
             deploy)
                 if deploy_contract "$contract"; then
-                    echo "✅ Deployment successful for $contract (exit code: $?)" 
+                    echo " Deployment successful for $contract (exit code: $?)" 
                     ((success_count++))
                 else
-                    echo "❌ Deployment failed for $contract (exit code: $?)" >&2
+                    echo " Deployment failed for $contract (exit code: $?)" >&2
                     ((fail_count++))
                     # Continue to next contract instead of exiting
                 fi
                 ;;
                 
             both)
-                echo -e "\n🚀 Building and Deploying $contract"
+                echo -e "\n Building and Deploying $contract"
                 if $BUILD_SCRIPT -t "$contract"; then
-                    echo "✅ Build successful, deploying..."
+                    echo " Build successful, deploying..."
                     if deploy_contract "$contract"; then
-                        echo "✅ Successfully built and deployed $contract"
+                        echo " Successfully built and deployed $contract"
                         ((success_count++))
                     else
-                        echo "❌ Deployment failed for $contract after retries" >&2
+                        echo " Deployment failed for $contract after retries" >&2
                         ((fail_count++))
                         # Continue to next contract
                     fi
                 else
-                    echo "❌ Build failed for $contract, skipping deployment" >&2
+                    echo " Build failed for $contract, skipping deployment" >&2
                     ((fail_count++))
                     # Continue to next contract
                 fi
@@ -581,9 +579,9 @@ main() {
     echo "Action:         $ACTION"
     echo "Duration:       ${duration}s"
     echo "Total:          $((success_count + fail_count + skipped_count))"
-    echo -n "✅ Success:      $success_count"
-    [ $skipped_count -gt 0 ] && echo -n "   ⏩ Skipped: $skipped_count"
-    [ $fail_count -gt 0 ] && echo -n "   ❌ Failed: $fail_count"
+    echo -n " Success:      $success_count"
+    [ $skipped_count -gt 0 ] && echo -n "   Skipped: $skipped_count"
+    [ $fail_count -gt 0 ] && echo -n "   Failed: $fail_count"
     echo -e "\n=========================="
     
     # Exit with error if any failures occurred
@@ -592,27 +590,27 @@ main() {
         exit 1
     fi
     
-    echo -e "\n✨ Successfully completed $ACTION process for $success_count contract(s) on $NETWORK"
+    echo -e "\n Successfully completed $ACTION process for $success_count contract(s) on $NETWORK"
     exit 0
 }
 
-# Run the main function and capture the exit status
+# Run main function and handle exit code
 set -x  # Enable debug output
-
-# Initialize exit code
-FINAL_EXIT=0
 
 # Run main function
 main "$@"
 MAIN_EXIT=$?
 
-# Update final exit code if main failed
-if [ $MAIN_EXIT -ne 0 ]; then
+# Cleanup keosd after all contracts are processed
+cleanup_keosd $MAIN_EXIT
+CLEANUP_EXIT=$?
+
+# Use the main exit code unless cleanup failed and main succeeded
+if [ $MAIN_EXIT -eq 0 ] && [ $CLEANUP_EXIT -ne 0 ]; then
+    FINAL_EXIT=$CLEANUP_EXIT
+else
     FINAL_EXIT=$MAIN_EXIT
 fi
-
-# Cleanup keosd after all contracts are processed
-cleanup_keosd $FINAL_EXIT
 
 echo "=== Deployment completed with exit code: $FINAL_EXIT ==="
 exit $FINAL_EXIT
