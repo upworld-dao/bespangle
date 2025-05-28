@@ -320,27 +320,6 @@ deploy_contract() {
     else
         return 0
     fi
-        echo "- Network: $NETWORK" >&2
-        echo "- Endpoint: $NETWORK_ENDPOINT" >&2
-        echo "- Contract: $contract" >&2
-        echo "- Account: $account" >&2
-        echo "- Build Directory: $build_dir" >&2
-        echo "- WASM File: $wasm_file $(if [ -f "$wasm_file" ]; then echo "✅"; else echo "❌ (MISSING)"; fi)" >&2
-        echo "- ABI File: $abi_file $(if [ -f "$abi_file" ]; then echo "✅"; else echo "❌ (MISSING)"; fi)" >&2
-        
-        # Check wallet status
-        echo -e "\n=== Wallet Status ===" >&2
-        if ! cleos wallet list 2>&1; then
-            echo "- keosd is not running or not accessible" >&2
-        else
-            echo -e "\n=== Wallet Keys ===" >&2
-            cleos wallet keys 2>&1 || true
-        fi
-        
-        return 1
-    else
-        return 0
-    fi
 }
 
 # Function to set up the wallet
