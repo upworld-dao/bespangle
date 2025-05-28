@@ -201,9 +201,10 @@ deploy_contract() {
         local bytes=$3
         
         # Calculate EOS amount needed (1 KB = 0.1 EOS is a common rate, adjust as needed)
-        local eos_amount=$(echo "scale=4; $bytes / 10000" | bc)
-        # Ensure we buy at least 0.1 EOS worth of RAM
-        eos_amount=$(echo "$eos_amount + 0.1" | bc)
+        # Use awk for floating point math to avoid bc dependency
+        local eos_amount=$(awk -v bytes="$bytes" 'BEGIN { printf "%.4f", (bytes / 10000) + 0.1 }')
+        # Ensure we buy at least 1.0 EOS worth of RAM for small contracts
+        eos_amount=$(awk -v amt="$eos_amount" 'BEGIN { printf "%.4f", amt < 1.0 ? 1.0 : amt }')
         
         echo "💰 Attempting to buy $bytes bytes of RAM for $receiver (cost: ~$eos_amount EOS)..."
         
@@ -258,7 +259,8 @@ deploy_contract() {
             else
                 echo "🔍 Determined needed RAM: $needed_ram bytes"
                 # Add 25% buffer to the needed RAM to ensure enough for table data
-                needed_ram=$(($needed_ram * 125 / 100))
+                # Using awk for floating point math to avoid bc dependency
+                needed_ram=$(awk -v ram="$needed_ram" 'BEGIN { printf "%.0f", ram * 1.25 }')
                 echo "📊 Buying RAM with 25% buffer: $needed_ram bytes"
             fi
             
