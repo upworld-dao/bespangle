@@ -398,6 +398,13 @@ main() {
         echo -e "\nProcessing specified contracts: ${contracts_to_process[*]}"
     fi
     
+    # Create build directory with proper permissions if it doesn't exist
+    if [ ! -d "build" ]; then
+        echo "Creating build directory..."
+        mkdir -p build || { echo "Failed to create build directory"; exit 1; }
+        chmod 777 build || { echo "Failed to set permissions on build directory"; exit 1; }
+    fi
+    
     # Process each contract
     local success_count=0
     local fail_count=0
