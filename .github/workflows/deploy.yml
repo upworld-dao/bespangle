@@ -2,27 +2,19 @@ name: Deploy Antelope Contracts
 
 on:
   push:
-    branches:
-      - 'jungle4'
-      - 'mainnet'
-      - 'wax'
-      - 'telos'
+    branches-ignore:
+      - '**'  # Allow all branches, we'll validate in the workflow
   workflow_dispatch:
     inputs:
       network:
-        description: 'Network to deploy to (must match branch name)'
+        description: 'Network to deploy to (must exist in network_config.json)'
         required: true
-        default: 'jungle4'
-        type: choice
-        options:
-          - jungle4
-          - mainnet
-          - wax
-          - telos
+        type: string
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.network || github.ref_name }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -37,21 +29,71 @@ jobs:
           wget https://github.com/AntelopeIO/leap/releases/download/v5.0.3/leap_5.0.3_amd64.deb
           sudo apt install ./leap_5.0.3_amd64.deb
       
-      - name: Configure Wallet
+      - name: Determine target network
+        id: network
+        run: |
+          # For manual triggers, use the input parameter; for push events, use the branch name
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            NETWORK="${{ github.event.inputs.network }}"
+          else
+            # Extract branch name from ref (e.g., refs/heads/automate-deployment -> automate-deployment)
+            NETWORK="${GITHUB_REF#refs/heads/}"
+          fi
+          
+          # Verify network exists in network_config.json
+          if ! jq -e ".networks.\"$NETWORK\"" network_config.json > /dev/null; then
+            echo "ERROR: No configuration found for network: $NETWORK" >&2
+            echo "Available networks: $(jq -r '.networks | keys | join(", ")' network_config.json)" >&2
+            exit 1
+          fi
+          
+          echo "network=$NETWORK" >> $GITHUB_OUTPUT
+          echo "Deploying to network: $NETWORK"
+      
+      - name: Verify network configuration
+        run: |
+          NETWORK=${{ steps.network.outputs.network }}
+          echo "Verifying configuration for network: $NETWORK"
+          
+          # Check if account configuration exists
+          if ! jq -e ".networks.\"$NETWORK\".accounts" network_config.json > /dev/null; then
+            echo "ERROR: No accounts configured for network: $NETWORK" >&2
+            exit 1
+          fi
+          
+          echo "Network configuration verified successfully"
+      
+      - name: Deploy Contracts
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
         run: |
+          # Make scripts executable
+          chmod +x ./deploy.sh
+          chmod +x ./docker-run.sh
+          
+          # Set network from previous step
+          NETWORK="${{ steps.network.outputs.network }}"
+          
           # Create wallet directory and set permissions
           mkdir -p ~/eosio-wallet
           chmod 700 ~/eosio-wallet
           
-          # Start keosd if not running
-          if ! pgrep -x "keosd" > /dev/null; then
-            echo "Starting keosd..."
-            keosd --http-server-address=127.0.0.1:8900 > /dev/null 2>&1 &
-            # Give keosd time to start
-            sleep 2
-          fi
+          # Start keosd in the background
+          echo "Starting keosd..."
+          keosd --http-server-address=127.0.0.1:8900 > /dev/null 2>&1 &
+          KESOD_PID=$!
+          
+          # Give keosd time to start
+          sleep 2
+          
+          # Function to clean up keosd process
+          cleanup() {
+            echo "Cleaning up..."
+            kill $KESOD_PID 2>/dev/null || true
+          }
+          
+          # Ensure keosd is cleaned up on exit
+          trap cleanup EXIT
           
           # Create wallet if it doesn't exist
           if ! cleos wallet list 2>/dev/null | grep -q "default"; then
@@ -60,6 +102,10 @@ jobs:
             
             # Import the private key
             echo "Importing private key..."
+            if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
+              echo "ERROR: DEPLOYER_PRIVATE_KEY is not set" >&2
+              exit 1
+            fi
             echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key
             
             # List keys to verify import
@@ -77,37 +123,13 @@ jobs:
           fi
           
           echo "Wallet configured successfully"
-      
-      - name: Determine target network
-        id: network
-        run: |
-          # For manual triggers, use the input parameter; for push events, use the branch name
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "network=${{ github.event.inputs.network }}" >> $GITHUB_OUTPUT
-          else
-            # Extract branch name from ref (e.g., refs/heads/jungle4 -> jungle4)
-            BRANCH_NAME=${GITHUB_REF#refs/heads/}
-            echo "network=${BRANCH_NAME}" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Verify network configuration
-        run: |
-          if ! jq -e ".networks.${{ steps.network.outputs.network }}" network_config.json > /dev/null; then
-            echo "ERROR: No configuration found for network: ${{ steps.network.outputs.network }}"
-            exit 1
-          fi
-          echo "Deploying to network: ${{ steps.network.outputs.network }}"
-
-      - name: Deploy Contracts
-        env:
-          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
-        run: |
-          # Make scripts executable
-          chmod +x ./deploy.sh
-          chmod +x ./docker-run.sh
           
           # Run deployment for the target network
-          ./deploy.sh --network ${{ steps.network.outputs.network }} --action both
+          echo "Starting deployment to $NETWORK..."
+          if ! ./deploy.sh --network "$NETWORK" --action both; then
+            echo "❌ Deployment failed" >&2
+            exit 1
+          fi
           
           # If we get here, the deployment was successful
-          echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"
+          echo "✅ Successfully deployed to $NETWORK network"
