@@ -122,14 +122,21 @@ jobs:
           WALLET_CREATE_OUTPUT=$(cleos wallet create --to-console 2>&1)
           echo "Wallet create output: $WALLET_CREATE_OUTPUT"
           
-          # Extract password from the output
-          WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -oP '(?<=:")(.*)(?=")' || true)
+          # Extract password from the output (format: "PW5...")
+          WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -o 'PW5[^\"]*' | head -1)
+          
+          if [ -z "$WALLET_PASSWORD" ]; then
+            # Try alternative format if the first attempt fails
+            WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -o '"PW5[^\"]*"' | tr -d '"')
+          fi
           
           if [ -z "$WALLET_PASSWORD" ]; then
             echo "ERROR: Failed to extract wallet password"
             echo "Wallet create output was: $WALLET_CREATE_OUTPUT"
             exit 1
           fi
+          
+          echo "Extracted wallet password: ${WALLET_PASSWORD:0:5}..."  # Only show first 5 chars for security
           
           # Save the password for future use in this session
           echo "$WALLET_PASSWORD" > ~/wallet_password.txt
