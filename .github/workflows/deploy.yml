@@ -2,8 +2,8 @@ name: Deploy Antelope Contracts
 
 on:
   push:
-    branches-ignore:
-      - '**'  # Allow all branches, we'll validate in the workflow
+    branches:
+      - '**'  # Run on all branches
   workflow_dispatch:
     inputs:
       network:
