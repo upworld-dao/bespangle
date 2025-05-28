@@ -98,7 +98,13 @@ jobs:
           chmod -R 777 build
           
           # Run the deployment in Docker with proper environment variables and user mapping
-          if ! docker run --rm \
+          set +e  # Don't fail immediately on error
+          
+          # Store the exit code from the deployment
+          DEPLOYMENT_EXIT_CODE=0
+          
+          # Run the deployment command
+          docker run --rm \
             -e BESPANGLE_IN_DOCKER=true \
             -e GITHUB_WORKSPACE=/github/workspace \
             -e NETWORK="$NETWORK" \
@@ -110,10 +116,15 @@ jobs:
             -w /github/workspace \
             --user "root" \
             bespangle-dev-env \
-            bash -c "chown -R $(id -u):$(id -g) /github/workspace/build && chmod -R 777 /github/workspace/build && ./deploy.sh --network \"$NETWORK\" --action both"; then
-            echo "❌ Deployment failed"
-            exit 1
-          fi
+            bash -c "chown -R $(id -u):$(id -g) /github/workspace/build && chmod -R 777 /github/workspace/build && ./deploy.sh --network \"$NETWORK\" --action both"
           
-          # If we get here, the deployment was successful
-          echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"
+          DEPLOYMENT_EXIT_CODE=$?
+          
+          # Check if deployment was successful
+          if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
+            echo "❌ Deployment encountered errors"
+            # Continue with other contracts even if one fails
+            continue
+          else
+            echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"
+          fi

@@ -539,8 +539,8 @@ main() {
                 if deploy_contract "$contract"; then
                     ((success_count++))
                 else
+                    echo "❌ Deployment failed for $contract" >&2
                     ((fail_count++))
-                    [ "$VERBOSE" -eq 1 ] && continue
                     exit 1
                 fi
                 ;;
@@ -552,8 +552,8 @@ main() {
                     if deploy_contract "$contract"; then
                         ((success_count++))
                     else
+                        echo "❌ Deployment failed for $contract" >&2
                         ((fail_count++))
-                        [ "$VERBOSE" -eq 1 ] && continue
                         exit 1
                     fi
                 else
