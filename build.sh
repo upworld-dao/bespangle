@@ -58,14 +58,8 @@ build_contract() {
     local contract=$1
     local src_dir="org/src"
     
-    # Determine the base build directory
+    # Use a relative build directory
     local base_build_dir="build"
-    if [ -d "/github/workspace" ]; then
-        base_build_dir="/github/workspace/build"
-    elif [ -d "/workspace" ]; then
-        base_build_dir="/workspace/build"
-    fi
-    
     local build_dir="${base_build_dir}/${contract}"
     
     echo "Building $contract..."
