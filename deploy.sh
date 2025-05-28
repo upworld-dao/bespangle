@@ -380,7 +380,8 @@ main() {
     if [ "$CONTRACTS" = "all" ]; then
         # Get all contract names from the accounts section
         echo -e "\nDiscovering contracts for network: $NETWORK"
-        contracts_to_process=($(jq -r ".networks.${NETWORK}.accounts | keys[]" "$NETWORK_CONFIG" 2>/dev/null))
+        # Use jq with --arg to properly handle network names with special characters
+        contracts_to_process=($(jq -r --arg net "$NETWORK" '.networks[$net].accounts | keys[]' "$NETWORK_CONFIG" 2>/dev/null))
         
         if [ ${#contracts_to_process[@]} -eq 0 ]; then
             echo "ERROR: No contracts configured for network: $NETWORK" >&2
