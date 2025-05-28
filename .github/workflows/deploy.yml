@@ -36,6 +36,12 @@ jobs:
           # Build the development environment
           docker build -t bespangle-dev-env -f Dockerfile .
           
+      - name: Prepare build directory
+        run: |
+          # Ensure build directory exists and has correct permissions
+          mkdir -p build
+          chmod -R 775 build
+          
       # Environment verification is handled by the job-level environment setting
       
       - name: Determine target network

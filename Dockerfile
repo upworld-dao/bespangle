@@ -81,10 +81,12 @@ ARG GROUP_ID=1000
 # Create a user and group if they don't exist
 RUN groupadd -g ${GROUP_ID} developer 2>/dev/null || true \
     && useradd -u ${USER_ID} -g ${GROUP_ID} -m developer 2>/dev/null || true \
-    && mkdir -p /workspace \
+    && mkdir -p /workspace/build \
     && mkdir -p /home/developer \
     && chown -R ${USER_ID}:${GROUP_ID} /workspace \
-    && chown -R ${USER_ID}:${GROUP_ID} /home/developer
+    && chown -R ${USER_ID}:${GROUP_ID} /home/developer \
+    && chmod 755 /workspace \
+    && chmod 775 /workspace/build
 
 # Set up a working directory inside the container
 WORKDIR /workspace

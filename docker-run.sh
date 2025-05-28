@@ -64,7 +64,8 @@ GROUP_ID=$(id -g)
 
 # Ensure the build directory exists and has the right permissions
 mkdir -p "$(pwd)/build"
-chmod -R a+rw "$(pwd)/build"
+chown -R $USER_ID:$GROUP_ID "$(pwd)/build"
+chmod -R 755 "$(pwd)/build"
 
 # Clean up build artifacts if requested
 if [ "$CLEAN_BUILD" = true ]; then
@@ -75,7 +76,7 @@ fi
 # Create a temporary directory for the container's home
 export CONTAINER_HOME="/tmp/container_home_$USER_ID"
 mkdir -p "$CONTAINER_HOME"
-chmod 777 "$CONTAINER_HOME"
+chmod 755 "$CONTAINER_HOME"
 
 # Create a local .gitconfig file for the container
 cat > "$CONTAINER_HOME/.gitconfig" << 'EOL'
@@ -84,6 +85,8 @@ cat > "$CONTAINER_HOME/.gitconfig" << 'EOL'
 EOL
 
 echo "Running in Docker container: $COMMAND"
+
+# Run the container with the current user's UID/GID
 docker run --rm -it \
     -v "$(pwd):/workspace" \
     -v "$CONTAINER_HOME:/home/developer" \
@@ -95,7 +98,7 @@ docker run --rm -it \
     -e GIT_CONFIG_NOSYSTEM=1 \
     --user "$USER_ID:$GROUP_ID" \
     bespangle-dev-env \
-    bash -c "chmod -R a+rw /workspace/build/ && $COMMAND"
+    bash -c "mkdir -p /workspace/build && chmod 755 /workspace/build && $COMMAND"
 
 # Clean up the temporary directory
 rm -rf "$CONTAINER_HOME"
