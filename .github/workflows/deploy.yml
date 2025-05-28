@@ -95,10 +95,14 @@ jobs:
           # Ensure keosd is cleaned up on exit
           trap cleanup EXIT
           
-          # Create wallet if it doesn't exist
+          # Create or open the wallet
           if ! cleos wallet list 2>/dev/null | grep -q "default"; then
             echo "Creating wallet..."
             cleos wallet create --file ~/wallet_password.txt
+            WALLET_PASSWORD=$(cat ~/wallet_password.txt)
+            
+            # Unlock the wallet with the password
+            cleos wallet unlock --password "$WALLET_PASSWORD"
             
             # Import the private key
             echo "Importing private key..."
@@ -113,12 +117,18 @@ jobs:
             cleos wallet keys
           else
             echo "Wallet already exists, unlocking..."
-            cleos wallet unlock --password $(cat ~/wallet_password.txt 2>/dev/null || echo "")
+            WALLET_PASSWORD=$(cat ~/wallet_password.txt 2>/dev/null || echo "")
+            if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
+              echo "ERROR: Failed to unlock existing wallet" >&2
+              exit 1
+            fi
           fi
           
           # Verify wallet is unlocked and has keys
           if ! cleos wallet list 2>/dev/null | grep -q '"default\*"'; then
-            echo "ERROR: Failed to unlock wallet" >&2
+            echo "ERROR: Wallet is not unlocked" >&2
+            echo "Current wallet status:"
+            cleos wallet list
             exit 1
           fi
           
