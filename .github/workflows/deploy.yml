@@ -95,40 +95,44 @@ jobs:
           # Ensure keosd is cleaned up on exit
           trap cleanup EXIT
           
-          # Create or open the wallet
+          # Check if wallet exists
           if ! cleos wallet list 2>/dev/null | grep -q "default"; then
             echo "Creating wallet..."
-            cleos wallet create --file ~/wallet_password.txt
-            WALLET_PASSWORD=$(cat ~/wallet_password.txt)
+            # Create wallet and capture the password
+            WALLET_PASSWORD=$(cleos wallet create --to-console | grep -oP '(?<=:")(.*)(?=")')
+            echo "$WALLET_PASSWORD" > ~/wallet_password.txt
             
-            # Unlock the wallet with the password
-            cleos wallet unlock --password "$WALLET_PASSWORD"
-            
-            # Import the private key
-            echo "Importing private key..."
-            if [ -z "$DEPLOYER_PRIVATE_KEY" ]; then
-              echo "ERROR: DEPLOYER_PRIVATE_KEY is not set" >&2
-              exit 1
+            # Import the private key if provided
+            if [ -n "$DEPLOYER_PRIVATE_KEY" ]; then
+              echo "Importing private key..."
+              echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key
+              
+              # List keys to verify import
+              echo "Wallet keys:"
+              cleos wallet keys
+            else
+              echo "WARNING: No DEPLOYER_PRIVATE_KEY provided, wallet is empty"
             fi
-            echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key
-            
-            # List keys to verify import
-            echo "Wallet keys:"
-            cleos wallet keys
           else
             echo "Wallet already exists, unlocking..."
-            WALLET_PASSWORD=$(cat ~/wallet_password.txt 2>/dev/null || echo "")
-            if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
-              echo "ERROR: Failed to unlock existing wallet" >&2
-              exit 1
+            if [ -f ~/wallet_password.txt ]; then
+              WALLET_PASSWORD=$(cat ~/wallet_password.txt)
+              # Only try to unlock if not already unlocked
+              if ! cleos wallet list 2>/dev/null | grep -q '"default\*"'; then
+                if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
+                  echo "ERROR: Failed to unlock existing wallet" >&2
+                  exit 1
+                fi
+              fi
+            else
+              echo "WARNING: Wallet password file not found, assuming wallet is unlocked"
             fi
           fi
           
-          # Verify wallet is unlocked and has keys
-          if ! cleos wallet list 2>/dev/null | grep -q '"default\*"'; then
-            echo "ERROR: Wallet is not unlocked" >&2
-            echo "Current wallet status:"
-            cleos wallet list
+          # Verify wallet status
+          echo "Wallet status:"
+          if ! cleos wallet list; then
+            echo "ERROR: Failed to list wallets" >&2
             exit 1
           fi
           
