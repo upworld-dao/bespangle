@@ -39,29 +39,44 @@ jobs:
       - name: Verify GitHub environment
         id: verify_env
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}  # Use github.token instead of secrets.GITHUB_TOKEN
         run: |
-          # Check if the environment exists using GitHub API
-          ENV_NAME="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.network || github.ref_name }}"
+          # Get the environment name from either workflow_dispatch input or branch name
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            ENV_NAME="${{ github.event.inputs.network }}"
+          else
+            ENV_NAME="${GITHUB_REF#refs/heads/}"
+          fi
           
           echo "Verifying GitHub environment '$ENV_NAME' exists..."
+          
+          # Debug: Show the token being used (masked in logs)
+          echo "Using GitHub token: ${GITHUB_TOKEN:0:4}...${GITHUB_TOKEN: -4}"
           
           # Use GitHub API to check if environment exists
           RESPONSE=$(curl -s \
             -H "Accept: application/vnd.github+json" \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Authorization: token $GITHUB_TOKEN" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             "https://api.github.com/repos/$GITHUB_REPOSITORY/environments")
             
+          # Debug: Show the raw response if needed
+          # echo "API Response: $RESPONSE"
+          
           if ! echo "$RESPONSE" | jq -e ".environments[] | select(.name == \"$ENV_NAME\")" > /dev/null; then
             echo "ERROR: No GitHub environment found for: $ENV_NAME" >&2
             echo "Available environments:" >&2
-            echo "$RESPONSE" | jq -r '.environments[].name' | sed 's/^/  - /' >&2
-            echo "\nTo fix this, create a GitHub environment named '$ENV_NAME' and configure its deployment protection rules and secrets." >&2
+            if [ -n "$RESPONSE" ]; then
+              echo "$RESPONSE" | jq -r '.environments[].name' | sed 's/^/  - /' >&2
+            else
+              echo "  (No environments found or error fetching environments)" >&2
+            fi
+            echo "\nTo fix this, create a GitHub environment named '$ENV_NAME' in the repository settings." >&2
+            echo "Repository: $GITHUB_REPOSITORY" >&2
             exit 1
           fi
           
-          echo "Using GitHub environment: $ENV_NAME"
+          echo "✓ Verified GitHub environment: $ENV_NAME"
       
       - name: Determine target network
         id: network
