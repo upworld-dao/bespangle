@@ -382,10 +382,12 @@ setup_wallet() {
 
 # Function to clean up keosd process
 cleanup_keosd() {
+    local exit_code=$?
     if [ -n "$KESOD_PID" ]; then
         echo "Cleaning up keosd process..."
         kill $KESOD_PID 2>/dev/null || true
     fi
+    return $exit_code
 }
 
 # Main script execution
@@ -531,16 +533,16 @@ main() {
                 else
                     echo "❌ Failed to build $contract" >&2
                     ((fail_count++))
-                    [ "$VERBOSE" -eq 1 ] && continue
                     exit 1
                 fi
                 ;;
                 
             deploy)
                 if deploy_contract "$contract"; then
+                    echo "✅ Deployment successful for $contract (exit code: $?)" 
                     ((success_count++))
                 else
-                    echo "❌ Deployment failed for $contract" >&2
+                    echo "❌ Deployment failed for $contract (exit code: $?)" >&2
                     ((fail_count++))
                     exit 1
                 fi
@@ -551,16 +553,16 @@ main() {
                 if $BUILD_SCRIPT -t "$contract"; then
                     echo "✅ Build successful, deploying..."
                     if deploy_contract "$contract"; then
+                        echo "✅ Deployment successful for $contract"
                         ((success_count++))
                     else
-                        echo "❌ Deployment failed for $contract" >&2
+                        echo "❌ Deployment failed for $contract after retries" >&2
                         ((fail_count++))
                         exit 1
                     fi
                 else
                     echo "❌ Build failed for $contract" >&2
                     ((fail_count++))
-                    [ "$VERBOSE" -eq 1 ] && continue
                     exit 1
                 fi
                 ;;
@@ -592,5 +594,9 @@ main() {
     exit 0
 }
 
-# Run the main function
+# Run the main function and capture the exit status
 main "$@"
+MAIN_EXIT=$?
+
+# Exit with the captured status code
+exit $MAIN_EXIT
