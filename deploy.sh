@@ -280,7 +280,8 @@ deploy_contract() {
             # 2. The contract is already deployed with the same code
             echo "✅ Contract is already deployed with the same code"
             deployment_success=1
-            break
+            # Explicitly return success (0) here to ensure we don't fail
+            return 0
         else
             echo "❌ Deployment failed with error:"
             echo "$output"
@@ -322,6 +323,7 @@ deploy_contract() {
     fi
     
     # If we get here, deployment was successful
+    # Explicitly return success (0) to ensure consistent behavior
     return 0
 }
 
