@@ -274,13 +274,15 @@ deploy_contract() {
             # Wait a bit for the transaction to be processed
             echo "⏳ Waiting for RAM allocation to complete..."
             sleep 3
-        elif [ $status -eq 0 ]; then
-            echo "✅ Contract deployed successfully!"
-            echo "✅ Deployment completed successfully"
-            deployment_success=0
+        elif [ $status -eq 0 ] || echo "$output" | grep -q "Skipping set code because the new code is the same as the existing code"; then
+            # Success if either:
+            # 1. The deployment command succeeded (status 0), or
+            # 2. The contract is already deployed with the same code
+            echo "✅ Contract is already deployed with the same code"
+            deployment_success=1
             break
         else
-            echo "❌ Deployment failed with unknown error:"
+            echo "❌ Deployment failed with error:"
             echo "$output"
             
             # If we have retries left, wait a bit before trying again
@@ -294,7 +296,7 @@ deploy_contract() {
         attempt=$((attempt + 1))
     done
     
-    if [ $deployment_success -ne 0 ]; then
+    if [ $deployment_success -eq 0 ]; then
         echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
         
         # Additional diagnostics
