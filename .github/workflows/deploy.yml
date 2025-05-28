@@ -73,6 +73,7 @@ jobs:
           # Make scripts executable
           chmod +x ./deploy.sh
           chmod +x ./docker-run.sh
+          set -x
           
           # Set network from previous step
           NETWORK="${{ steps.network.outputs.network }}"
@@ -108,58 +109,53 @@ jobs:
             exit 1
           fi
           
-          # Check if wallet exists
-          echo "Checking for existing wallet..."
-          if cleos wallet list 2>&1 | grep -q "No available wallet"; then
-            echo "No wallet found, creating new wallet..."
-            # Create wallet with --to-console to capture the password
-            WALLET_CREATE_OUTPUT=$(cleos wallet create --to-console 2>&1)
-            echo "Wallet create output: $WALLET_CREATE_OUTPUT"
-            
-            # Extract password from the output
-            WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -oP '(?<=:")(.*)(?=")' || true)
-            
-            if [ -z "$WALLET_PASSWORD" ]; then
-              echo "ERROR: Failed to extract wallet password"
-              echo "Wallet create output was: $WALLET_CREATE_OUTPUT"
-              exit 1
-            fi
-            
-            echo "$WALLET_PASSWORD" > ~/wallet_password.txt
-            echo "Wallet created successfully"
-            
-            # Import the private key if provided
-            if [ -n "$DEPLOYER_PRIVATE_KEY" ]; then
-              echo "Importing private key..."
-              if ! echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key; then
-                echo "ERROR: Failed to import private key"
-                exit 1
-              fi
-              
-              # List keys to verify import
-              echo "Wallet keys after import:"
-              cleos wallet keys
-            else
-              echo "WARNING: No DEPLOYER_PRIVATE_KEY provided, wallet is empty"
-            fi
-          else
-            echo "Wallet already exists, checking status..."
-            cleos wallet list
+          # Always create a fresh wallet to avoid state issues
+          echo "Setting up wallet..."
+          
+          # Remove any existing wallet
+          cleos wallet stop 2>/dev/null || true
+          rm -f ~/eosio-wallet/*.wallet
+          rm -f ~/eosio-wallet/*.wallet.lock
+          
+          # Create a new wallet
+          echo "Creating new wallet..."
+          WALLET_CREATE_OUTPUT=$(cleos wallet create --to-console 2>&1)
+          echo "Wallet create output: $WALLET_CREATE_OUTPUT"
+          
+          # Extract password from the output
+          WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -oP '(?<=:")(.*)(?=")' || true)
+          
+          if [ -z "$WALLET_PASSWORD" ]; then
+            echo "ERROR: Failed to extract wallet password"
+            echo "Wallet create output was: $WALLET_CREATE_OUTPUT"
+            exit 1
           fi
+          
+          # Save the password for future use in this session
+          echo "$WALLET_PASSWORD" > ~/wallet_password.txt
+          chmod 600 ~/wallet_password.txt
           
           # Verify wallet is unlocked
           if ! cleos wallet list | grep -q '"default\*"'; then
-            echo "Wallet is not unlocked, attempting to unlock..."
-            if [ -f ~/wallet_password.txt ]; then
-              WALLET_PASSWORD=$(cat ~/wallet_password.txt)
-              if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
-                echo "ERROR: Failed to unlock wallet"
-                exit 1
-              fi
-            else
-              echo "ERROR: Wallet is locked and no password file found"
+            echo "Unlocking wallet..."
+            if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
+              echo "ERROR: Failed to unlock wallet"
               exit 1
             fi
+          fi
+          
+          # Import the private key if provided
+          if [ -n "$DEPLOYER_PRIVATE_KEY" ]; then
+            echo "Importing private key..."
+            if ! echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key; then
+              echo "WARNING: Failed to import private key (it might already be imported)"
+            fi
+            
+            # List keys to verify import
+            echo "Wallet keys:"
+            cleos wallet keys
+          else
+            echo "WARNING: No DEPLOYER_PRIVATE_KEY provided, wallet is empty"
           fi
           
           echo "Wallet is ready"
