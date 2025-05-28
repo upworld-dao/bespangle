@@ -317,9 +317,10 @@ deploy_contract() {
         fi
         
         return 1
-    else
-        return 0
     fi
+    
+    # If we get here, deployment was successful
+    return 0
 }
 
 # Function to set up the wallet
