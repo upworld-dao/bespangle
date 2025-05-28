@@ -98,12 +98,12 @@ jobs:
           chmod -R 777 build
           
           # Run the deployment in Docker with proper environment variables and user mapping
-          set +e  # Don't fail immediately on error
+          echo "🚀 Starting deployment to $NETWORK network..."
+          echo "Working directory: $(pwd)"
           
-          # Store the exit code from the deployment
-          DEPLOYMENT_EXIT_CODE=0
+          # Run the deployment command with debug output
+          set -x  # Enable command echoing
           
-          # Run the deployment command
           docker run --rm \
             -e BESPANGLE_IN_DOCKER=true \
             -e GITHUB_WORKSPACE=/github/workspace \
@@ -116,14 +116,22 @@ jobs:
             -w /github/workspace \
             --user "root" \
             bespangle-dev-env \
-            bash -c "chown -R $(id -u):$(id -g) /github/workspace/build && chmod -R 777 /github/workspace/build && ./deploy.sh --network \"$NETWORK\" --action both"
+            bash -c "
+              set -ex &&
+              echo '=== Setting permissions...' &&
+              chown -R $(id -u):$(id -g) /github/workspace/build &&
+              chmod -R 777 /github/workspace/build &&
+              echo '=== Starting deployment script...' &&
+              ./deploy.sh --network \"$NETWORK\" --action both
+            "
           
           DEPLOYMENT_EXIT_CODE=$?
+          echo "=== Deployment script exited with code: $DEPLOYMENT_EXIT_CODE ==="
           
           # Check if deployment was successful
           if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
-            echo "❌ Deployment encountered errors"
-            exit 1
+            echo "❌ Deployment failed with exit code $DEPLOYMENT_EXIT_CODE"
+            exit $DEPLOYMENT_EXIT_CODE
           else
             echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"
           fi
