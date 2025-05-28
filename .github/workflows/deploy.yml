@@ -36,47 +36,7 @@ jobs:
           # Build the development environment
           docker build -t bespangle-dev-env -f Dockerfile .
           
-      - name: Verify GitHub environment
-        id: verify_env
-        env:
-          GITHUB_TOKEN: ${{ github.token }}  # Use github.token instead of secrets.GITHUB_TOKEN
-        run: |
-          # Get the environment name from either workflow_dispatch input or branch name
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            ENV_NAME="${{ github.event.inputs.network }}"
-          else
-            ENV_NAME="${GITHUB_REF#refs/heads/}"
-          fi
-          
-          echo "Verifying GitHub environment '$ENV_NAME' exists..."
-          
-          # Debug: Show the token being used (masked in logs)
-          echo "Using GitHub token: ${GITHUB_TOKEN:0:4}...${GITHUB_TOKEN: -4}"
-          
-          # Use GitHub API to check if environment exists
-          RESPONSE=$(curl -s \
-            -H "Accept: application/vnd.github+json" \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/$GITHUB_REPOSITORY/environments")
-            
-          # Debug: Show the raw response if needed
-          # echo "API Response: $RESPONSE"
-          
-          if ! echo "$RESPONSE" | jq -e ".environments[] | select(.name == \"$ENV_NAME\")" > /dev/null; then
-            echo "ERROR: No GitHub environment found for: $ENV_NAME" >&2
-            echo "Available environments:" >&2
-            if [ -n "$RESPONSE" ]; then
-              echo "$RESPONSE" | jq -r '.environments[].name' | sed 's/^/  - /' >&2
-            else
-              echo "  (No environments found or error fetching environments)" >&2
-            fi
-            echo "\nTo fix this, create a GitHub environment named '$ENV_NAME' in the repository settings." >&2
-            echo "Repository: $GITHUB_REPOSITORY" >&2
-            exit 1
-          fi
-          
-          echo "✓ Verified GitHub environment: $ENV_NAME"
+      # Environment verification is handled by the job-level environment setting
       
       - name: Determine target network
         id: network
@@ -90,15 +50,6 @@ jobs:
             echo "ERROR: No configuration found for network: $NETWORK" >&2
             echo "Available networks: $(jq -r '.networks | keys | join(", ")' network_config.json)" >&2
             echo "\nTo deploy to this branch, add a '$NETWORK' configuration to network_config.json" >&2
-            exit 1
-          fi
-          
-          # Verify the GitHub environment exists
-          echo "Verifying GitHub environment '$NETWORK' exists..."
-          if ! gh api "/repos/$GITHUB_REPOSITORY/environments/$NETWORK" --jq .name 2>/dev/null; then
-            echo "ERROR: No GitHub environment found for network: $NETWORK" >&2
-            echo "Available environments: $(gh api "/repos/$GITHUB_REPOSITORY/environments" --jq '.environments[].name' | tr '\n' ' ')" >&2
-            echo "\nTo fix this, create a GitHub environment named '$NETWORK' and configure its deployment protection rules and secrets." >&2
             exit 1
           fi
           
