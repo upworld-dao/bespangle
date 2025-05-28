@@ -395,9 +395,6 @@ cleanup_keosd() {
 
 # Main script execution
 main() {
-    # Set up error handling
-    trap cleanup_keosd EXIT
-    
     # Set up the wallet
     setup_wallet
     # Parse command line arguments
@@ -600,18 +597,20 @@ main() {
 # Run the main function and capture the exit status
 set -x  # Enable debug output
 
-# Run main function in a subshell to handle cleanup properly
-(
-    main "$@"
-    MAIN_EXIT=$?
-    echo "=== Main function exited with code: $MAIN_EXIT ==="
-    exit $MAIN_EXIT
-)
+# Initialize exit code
+FINAL_EXIT=0
 
-# Capture the exit status from the subshell
+# Run main function
+main "$@"
 MAIN_EXIT=$?
 
-# Cleanup and exit with the captured status code
-cleanup_keosd $MAIN_EXIT
-echo "=== Final exit code: $MAIN_EXIT ==="
-exit $MAIN_EXIT
+# Update final exit code if main failed
+if [ $MAIN_EXIT -ne 0 ]; then
+    FINAL_EXIT=$MAIN_EXIT
+fi
+
+# Cleanup keosd after all contracts are processed
+cleanup_keosd $FINAL_EXIT
+
+echo "=== Deployment completed with exit code: $FINAL_EXIT ==="
+exit $FINAL_EXIT
