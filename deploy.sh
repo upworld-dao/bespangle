@@ -533,7 +533,7 @@ main() {
                 else
                     echo "❌ Failed to build $contract" >&2
                     ((fail_count++))
-                    exit 1
+                    # Continue to next contract instead of exiting
                 fi
                 ;;
                 
@@ -553,17 +553,17 @@ main() {
                 if $BUILD_SCRIPT -t "$contract"; then
                     echo "✅ Build successful, deploying..."
                     if deploy_contract "$contract"; then
-                        echo "✅ Deployment successful for $contract"
+                        echo "✅ Successfully built and deployed $contract"
                         ((success_count++))
                     else
                         echo "❌ Deployment failed for $contract after retries" >&2
                         ((fail_count++))
-                        # Continue to next contract instead of exiting
+                        # Continue to next contract
                     fi
                 else
-                    echo "❌ Build failed for $contract" >&2
+                    echo "❌ Build failed for $contract, skipping deployment" >&2
                     ((fail_count++))
-                    # Continue to next contract even if build fails
+                    # Continue to next contract
                 fi
                 ;;
         esac
