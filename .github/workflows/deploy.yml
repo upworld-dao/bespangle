@@ -38,9 +38,14 @@ jobs:
           
       - name: Prepare build directory
         run: |
-          # Ensure build directory exists and has correct permissions
+          # Ensure build directory exists with correct permissions and ownership
+          mkdir -p /github/workspace/build
+          chmod -R 777 /github/workspace/build
+          chown -R $(id -u):$(id -g) /github/workspace/build
+          
+          # Also create local build directory for compatibility
           mkdir -p build
-          chmod -R 775 build
+          chmod -R 777 build
           
       # Environment verification is handled by the job-level environment setting
       

@@ -133,14 +133,50 @@ deploy_contract() {
     
     echo "=== Deploying $contract to $account on $NETWORK ==="
     
-    # Handle both local and container paths
-    local build_dir="build/${contract}"
-    if [ -d "/workspace" ]; then  # Inside GitHub Actions container
-        build_dir="/workspace/${build_dir}"
+    # Handle different possible build directory locations
+    local possible_build_dirs=(
+        "build/${contract}"                  # Local development
+        "/workspace/build/${contract}"       # Standard container path
+        "/github/workspace/build/${contract}" # GitHub Actions path
+    )
+    
+    local build_dir=""
+    local wasm_file=""
+    local abi_file=""
+    
+    # Find the first existing build directory
+    for dir in "${possible_build_dirs[@]}"; do
+        local wasm="${dir}/${contract}.wasm"
+        local abi="${dir}/${contract}.abi"
+        
+        if [ -f "$wasm" ] && [ -f "$abi" ]; then
+            build_dir="$dir"
+            wasm_file="$wasm"
+            abi_file="$abi"
+            break
+        fi
+    done
+    
+    if [ -z "$build_dir" ]; then
+        # If no build dir found, use the first one that exists
+        for dir in "${possible_build_dirs[@]}"; do
+            if [ -d "$(dirname "$dir")" ]; then
+                build_dir="$dir"
+                wasm_file="${dir}/${contract}.wasm"
+                abi_file="${dir}/${contract}.abi"
+                mkdir -p "$build_dir"
+                break
+            fi
+        done
     fi
     
-    local wasm_file="${build_dir}/${contract}.wasm"
-    local abi_file="${build_dir}/${contract}.abi"
+    if [ -z "$build_dir" ]; then
+        # If still no directory, use default relative path
+        build_dir="build/${contract}"
+        wasm_file="${build_dir}/${contract}.wasm"
+        abi_file="${build_dir}/${contract}.abi"
+        mkdir -p "$build_dir"
+    fi
     
     # Verify the contract was built
     if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ]; then

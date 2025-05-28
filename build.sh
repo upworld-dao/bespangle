@@ -57,9 +57,19 @@ should_skip_contract() {
 build_contract() {
     local contract=$1
     local src_dir="org/src"
-    local build_dir="build/${contract}"
+    
+    # Determine the base build directory
+    local base_build_dir="build"
+    if [ -d "/github/workspace" ]; then
+        base_build_dir="/github/workspace/build"
+    elif [ -d "/workspace" ]; then
+        base_build_dir="/workspace/build"
+    fi
+    
+    local build_dir="${base_build_dir}/${contract}"
     
     echo "Building $contract..."
+    echo "Output directory: $build_dir"
     
     # Create build directory with proper permissions if it doesn't exist
     mkdir -p "$build_dir"
