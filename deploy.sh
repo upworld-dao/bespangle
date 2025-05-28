@@ -235,14 +235,27 @@ setup_wallet() {
     mkdir -p ~/eosio-wallet
     chmod 700 ~/eosio-wallet
     
-    # Start keosd in the background
+    # Create log directory and set permissions
+    mkdir -p ~/eosio-wallet/logs
+    chmod 700 ~/eosio-wallet/logs
+    
+    # Start keosd in the background with log file in the wallet directory
     echo "Starting keosd..."
-    keosd --http-server-address=127.0.0.1:8900 > keosd.log 2>&1 &
+    keosd --http-server-address=127.0.0.1:8900 > ~/eosio-wallet/logs/keosd.log 2>&1 &
     KESOD_PID=$!
     
     # Give keosd time to start
     echo "Waiting for keosd to start..."
     sleep 5
+    
+    # Check if keosd is running
+    if ! ps -p $KESOD_PID > /dev/null; then
+        echo "ERROR: Failed to start keosd"
+        echo "=== keosd log ==="
+        cat ~/eosio-wallet/logs/keosd.log 2>/dev/null || echo "No log file found"
+        echo "================="
+        exit 1
+    fi
     
     # Create a new wallet
     echo "Creating new wallet..."
