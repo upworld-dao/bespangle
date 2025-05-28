@@ -227,8 +227,65 @@ deploy_contract() {
     return 0
 }
 
+# Function to set up the wallet
+setup_wallet() {
+    echo "Setting up wallet..."
+    
+    # Create wallet directory and set permissions
+    mkdir -p ~/eosio-wallet
+    chmod 700 ~/eosio-wallet
+    
+    # Start keosd in the background
+    echo "Starting keosd..."
+    keosd --http-server-address=127.0.0.1:8900 > keosd.log 2>&1 &
+    KESOD_PID=$!
+    
+    # Give keosd time to start
+    echo "Waiting for keosd to start..."
+    sleep 5
+    
+    # Create a new wallet
+    echo "Creating new wallet..."
+    WALLET_CREATE_OUTPUT=$(cleos wallet create --to-console 2>&1)
+    
+    # Extract password from the output
+    WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -o 'PW5[^\"]*' | head -1)
+    
+    if [ -z "$WALLET_PASSWORD" ]; then
+        echo "ERROR: Failed to extract wallet password"
+        exit 1
+    fi
+    
+    # Save the password for future use
+    echo "$WALLET_PASSWORD" > ~/wallet_password.txt
+    chmod 600 ~/wallet_password.txt
+    
+    # Import the private key if provided
+    if [ -n "$DEPLOYER_PRIVATE_KEY" ]; then
+        echo "Importing private key..."
+        if ! echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key; then
+            echo "WARNING: Failed to import private key (it might already be imported)"
+        fi
+    else
+        echo "WARNING: No DEPLOYER_PRIVATE_KEY provided, wallet is empty"
+    fi
+}
+
+# Function to clean up keosd process
+cleanup_keosd() {
+    if [ -n "$KESOD_PID" ]; then
+        echo "Cleaning up keosd process..."
+        kill $KESOD_PID 2>/dev/null || true
+    fi
+}
+
 # Main script execution
 main() {
+    # Set up error handling
+    trap cleanup_keosd EXIT
+    
+    # Set up the wallet
+    setup_wallet
     # Parse command line arguments
     while [[ $# -gt 0 ]]; do
         case $1 in

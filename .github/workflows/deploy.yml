@@ -19,15 +19,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Antelope CDT
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          
+      - name: Build Docker image
         run: |
-          wget https://github.com/AntelopeIO/cdt/releases/download/v4.1.0/cdt_4.1.0-1_amd64.deb
-          sudo apt install ./cdt_4.1.0-1_amd64.deb
-      
-      - name: Setup cleos
-        run: |
-          wget https://github.com/AntelopeIO/leap/releases/download/v5.0.3/leap_5.0.3_amd64.deb
-          sudo apt install ./leap_5.0.3_amd64.deb
+          # Build the development environment
+          docker build -t bespangle-dev-env -f Dockerfile .
       
       - name: Determine target network
         id: network
@@ -73,97 +73,23 @@ jobs:
           # Make scripts executable
           chmod +x ./deploy.sh
           chmod +x ./docker-run.sh
-          set -x
           
-          # Set network from previous step
-          NETWORK="${{ steps.network.outputs.network }}"
+          # Set GitHub workspace variables
+          export GITHUB_WORKSPACE=$(pwd)
           
-          # Create wallet directory and set permissions
-          mkdir -p ~/eosio-wallet
-          chmod 700 ~/eosio-wallet
-          
-          # Start keosd in the background
-          echo "Starting keosd..."
-          keosd --http-server-address=127.0.0.1:8900 > keosd.log 2>&1 &
-          KESOD_PID=$!
-          
-          # Give keosd time to start
-          echo "Waiting for keosd to start..."
-          sleep 5
-          
-          # Function to clean up keosd process
-          cleanup() {
-            echo "=== keosd log ==="
-            cat keosd.log
-            echo "================="
-            echo "Cleaning up..."
-            kill $KESOD_PID 2>/dev/null || true
-          }
-          
-          # Ensure keosd is cleaned up on exit
-          trap cleanup EXIT
-          
-          # Check if keosd is running
-          if ! ps -p $KESOD_PID > /dev/null; then
-            echo "ERROR: Failed to start keosd"
-            exit 1
-          fi
-          
-          # Always create a fresh wallet to avoid state issues
-          echo "Setting up wallet..."
-          
-          # Remove any existing wallet
-          cleos wallet stop 2>/dev/null || true
-          rm -f ~/eosio-wallet/*.wallet
-          rm -f ~/eosio-wallet/*.wallet.lock
-          
-          # Create a new wallet
-          echo "Creating new wallet..."
-          WALLET_CREATE_OUTPUT=$(cleos wallet create --to-console 2>&1)
-          echo "Wallet create output: $WALLET_CREATE_OUTPUT"
-          
-          # Extract password from the output (format: "PW5...")
-          WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -o 'PW5[^\"]*' | head -1)
-          
-          if [ -z "$WALLET_PASSWORD" ]; then
-            # Try alternative format if the first attempt fails
-            WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -o '"PW5[^\"]*"' | tr -d '"')
-          fi
-          
-          if [ -z "$WALLET_PASSWORD" ]; then
-            echo "ERROR: Failed to extract wallet password"
-            exit 1
-          fi
-          
-          # Save the password for future use in this session
-          echo "$WALLET_PASSWORD" > ~/wallet_password.txt
-          chmod 600 ~/wallet_password.txt
-          
-          # The wallet is already unlocked after creation, no need to unlock again
-          echo "Wallet is ready"
-          
-          # Import the private key if provided
-          if [ -n "$DEPLOYER_PRIVATE_KEY" ]; then
-            echo "Importing private key..."
-            if ! echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key; then
-              echo "WARNING: Failed to import private key (it might already be imported)"
-            fi
-            
-            # List keys to verify import
-            echo "Wallet keys:"
-            cleos wallet keys
-          else
-            echo "WARNING: No DEPLOYER_PRIVATE_KEY provided, wallet is empty"
-          fi
-          
-          echo "Wallet is ready"
-          
-          # Run deployment for the target network
-          echo "Starting deployment to $NETWORK..."
-          if ! ./deploy.sh --network "$NETWORK" --action both; then
+          # Run the deployment in Docker with proper environment variables
+          if ! docker run --rm \
+            -e BESPANGLE_IN_DOCKER=true \
+            -e GITHUB_WORKSPACE=/github/workspace \
+            -e NETWORK="${{ steps.network.outputs.network }}" \
+            -e DEPLOYER_PRIVATE_KEY="${{ secrets.DEPLOYER_PRIVATE_KEY }}" \
+            -v "$GITHUB_WORKSPACE:/github/workspace" \
+            -w /github/workspace \
+            bespangle-dev-env \
+            ./deploy.sh --network "${{ steps.network.outputs.network }}" --action both; then
             echo "❌ Deployment failed"
             exit 1
           fi
           
           # If we get here, the deployment was successful
-          echo "✅ Successfully deployed to $NETWORK network"
+          echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"
