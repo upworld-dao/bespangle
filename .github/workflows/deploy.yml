@@ -67,6 +67,9 @@ jobs:
         env:
           DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
         run: |
+          # Enable debug output
+          set -x
+          
           # Make scripts executable
           chmod +x ./deploy.sh
           chmod +x ./docker-run.sh
@@ -80,14 +83,18 @@ jobs:
           
           # Start keosd in the background
           echo "Starting keosd..."
-          keosd --http-server-address=127.0.0.1:8900 > /dev/null 2>&1 &
+          keosd --http-server-address=127.0.0.1:8900 > keosd.log 2>&1 &
           KESOD_PID=$!
           
           # Give keosd time to start
-          sleep 2
+          echo "Waiting for keosd to start..."
+          sleep 5
           
           # Function to clean up keosd process
           cleanup() {
+            echo "=== keosd log ==="
+            cat keosd.log
+            echo "================="
             echo "Cleaning up..."
             kill $KESOD_PID 2>/dev/null || true
           }
@@ -95,53 +102,72 @@ jobs:
           # Ensure keosd is cleaned up on exit
           trap cleanup EXIT
           
+          # Check if keosd is running
+          if ! ps -p $KESOD_PID > /dev/null; then
+            echo "ERROR: Failed to start keosd"
+            exit 1
+          fi
+          
           # Check if wallet exists
-          if ! cleos wallet list 2>/dev/null | grep -q "default"; then
-            echo "Creating wallet..."
-            # Create wallet and capture the password
-            WALLET_PASSWORD=$(cleos wallet create --to-console | grep -oP '(?<=:")(.*)(?=")')
+          echo "Checking for existing wallet..."
+          if cleos wallet list 2>&1 | grep -q "No available wallet"; then
+            echo "No wallet found, creating new wallet..."
+            # Create wallet with --to-console to capture the password
+            WALLET_CREATE_OUTPUT=$(cleos wallet create --to-console 2>&1)
+            echo "Wallet create output: $WALLET_CREATE_OUTPUT"
+            
+            # Extract password from the output
+            WALLET_PASSWORD=$(echo "$WALLET_CREATE_OUTPUT" | grep -oP '(?<=:")(.*)(?=")' || true)
+            
+            if [ -z "$WALLET_PASSWORD" ]; then
+              echo "ERROR: Failed to extract wallet password"
+              echo "Wallet create output was: $WALLET_CREATE_OUTPUT"
+              exit 1
+            fi
+            
             echo "$WALLET_PASSWORD" > ~/wallet_password.txt
+            echo "Wallet created successfully"
             
             # Import the private key if provided
             if [ -n "$DEPLOYER_PRIVATE_KEY" ]; then
               echo "Importing private key..."
-              echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key
+              if ! echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key; then
+                echo "ERROR: Failed to import private key"
+                exit 1
+              fi
               
               # List keys to verify import
-              echo "Wallet keys:"
+              echo "Wallet keys after import:"
               cleos wallet keys
             else
               echo "WARNING: No DEPLOYER_PRIVATE_KEY provided, wallet is empty"
             fi
           else
-            echo "Wallet already exists, unlocking..."
+            echo "Wallet already exists, checking status..."
+            cleos wallet list
+          fi
+          
+          # Verify wallet is unlocked
+          if ! cleos wallet list | grep -q '"default\*"'; then
+            echo "Wallet is not unlocked, attempting to unlock..."
             if [ -f ~/wallet_password.txt ]; then
               WALLET_PASSWORD=$(cat ~/wallet_password.txt)
-              # Only try to unlock if not already unlocked
-              if ! cleos wallet list 2>/dev/null | grep -q '"default\*"'; then
-                if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
-                  echo "ERROR: Failed to unlock existing wallet" >&2
-                  exit 1
-                fi
+              if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
+                echo "ERROR: Failed to unlock wallet"
+                exit 1
               fi
             else
-              echo "WARNING: Wallet password file not found, assuming wallet is unlocked"
+              echo "ERROR: Wallet is locked and no password file found"
+              exit 1
             fi
           fi
           
-          # Verify wallet status
-          echo "Wallet status:"
-          if ! cleos wallet list; then
-            echo "ERROR: Failed to list wallets" >&2
-            exit 1
-          fi
-          
-          echo "Wallet configured successfully"
+          echo "Wallet is ready"
           
           # Run deployment for the target network
           echo "Starting deployment to $NETWORK..."
           if ! ./deploy.sh --network "$NETWORK" --action both; then
-            echo "❌ Deployment failed" >&2
+            echo "❌ Deployment failed"
             exit 1
           fi
           
