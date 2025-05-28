@@ -278,6 +278,7 @@ deploy_contract() {
             echo "✅ Contract deployed successfully!"
             echo "✅ Deployment completed successfully"
             deployment_success=0
+            break
         else
             echo "❌ Deployment failed with unknown error:"
             echo "$output"
