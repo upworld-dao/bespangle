@@ -145,8 +145,12 @@ deploy_contract() {
     # Verify the contract was built
     if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ]; then
         echo "ERROR: Contract files not found for $contract" >&2
+        echo "  - Current directory: $(pwd)" >&2
         echo "  - Expected WASM: $wasm_file" >&2
         echo "  - Expected ABI: $abi_file" >&2
+        echo "  - Build directory contents ($build_dir):" >&2
+        ls -la "$build_dir" 2>&1 || echo "    (does not exist)" >&2
+        echo "  - Build directory absolute path: $(realpath "$build_dir" 2>/dev/null || echo "not found")/" >&2
         echo "Please build the contract first using: ./build.sh --target $contract" >&2
         return 1
     fi
@@ -166,8 +170,7 @@ deploy_contract() {
     local cleos_cmd=(
         cleos -u "$NETWORK_ENDPOINT"
         --print-request --print-response
-        set contract "$account" "$build_dir"
-        "$wasm_file" "$abi_file"
+        set contract "$account" "$(dirname "$wasm_file")" "$wasm_file" "$abi_file"
         -p "$account@active"
     )
     
