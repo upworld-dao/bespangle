@@ -233,6 +233,7 @@ deploy_contract() {
     local attempt=1
     local output
     local status
+    local deployment_success=0
     
     while [ $attempt -le $max_retries ]; do
         echo "🚀 Deployment attempt $attempt of $max_retries..."
@@ -275,7 +276,8 @@ deploy_contract() {
             sleep 3
         elif [ $status -eq 0 ]; then
             echo "✅ Contract deployed successfully!"
-            return 0
+            deployment_success=1
+            break
         else
             echo "❌ Deployment failed with unknown error:"
             echo "$output"
@@ -291,18 +293,8 @@ deploy_contract() {
         attempt=$((attempt + 1))
     done
     
-    echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
-    return 1
-    local start_time=$(date +%s)
-    
-    # Run the command and capture both stdout and stderr
-    echo -n "Deploying $contract... "
-    if ! "${cleos_cmd[@]}" > "$temp_output" 2>&1; then
-        echo "❌ FAILED"
-        echo "ERROR: Failed to deploy $contract to $NETWORK" >&2
-        echo "Command: ${cleos_cmd[*]}" >&2
-        echo -e "\n=== Error Output ===" >&2
-        cat "$temp_output" >&2
+    if [ $deployment_success -eq 0 ]; then
+        echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
         
         # Additional diagnostics
         echo -e "\n=== Diagnostic Information ===" >&2
@@ -323,25 +315,10 @@ deploy_contract() {
             cleos wallet keys 2>&1 || true
         fi
         
-        rm -f "$temp_output"
         return 1
-    fi
-    
-    local end_time=$(date +%s)
-    local duration=$((end_time - start_time))
-    
-    # If we get here, the command succeeded
-    if [ "$VERBOSE" -eq 1 ]; then
-        echo -e "✅ SUCCESS (${duration}s)\n"
-        echo "=== Deployment Output ==="
-        cat "$temp_output"
-        echo -e "\n=========================="
     else
-        echo "✅ SUCCESS (${duration}s)"
+        return 0
     fi
-    
-    rm -f "$temp_output"
-    return 0
 }
 
 # Function to set up the wallet
