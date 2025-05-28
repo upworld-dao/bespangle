@@ -382,11 +382,12 @@ setup_wallet() {
 
 # Function to clean up keosd process
 cleanup_keosd() {
-    local exit_code=$?
+    local exit_code=${1:-$?}  # Allow passing exit code as parameter
     echo "=== Starting cleanup_keosd (exit_code: $exit_code) ==="
     if [ -n "$KESOD_PID" ]; then
         echo "Stopping keosd process (PID: $KESOD_PID)..."
         kill $KESOD_PID 2>/dev/null || echo "Warning: Failed to stop keosd"
+        unset KESOD_PID
     fi
     echo "=== Finished cleanup_keosd ==="
     return $exit_code
@@ -598,11 +599,19 @@ main() {
 
 # Run the main function and capture the exit status
 set -x  # Enable debug output
-main "$@"
+
+# Run main function in a subshell to handle cleanup properly
+(
+    main "$@"
+    MAIN_EXIT=$?
+    echo "=== Main function exited with code: $MAIN_EXIT ==="
+    exit $MAIN_EXIT
+)
+
+# Capture the exit status from the subshell
 MAIN_EXIT=$?
-echo "=== Main function exited with code: $MAIN_EXIT ==="
 
 # Cleanup and exit with the captured status code
-cleanup_keosd
+cleanup_keosd $MAIN_EXIT
 echo "=== Final exit code: $MAIN_EXIT ==="
 exit $MAIN_EXIT
