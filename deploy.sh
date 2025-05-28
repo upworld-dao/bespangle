@@ -133,14 +133,34 @@ deploy_contract() {
     
     echo "=== Deploying $contract to $account on $NETWORK ==="
     
-    # Use relative build directory
-    local build_dir="build/${contract}"
+    # Determine the correct build directory path
+    local base_dir="."
+    if [ -n "$GITHUB_WORKSPACE" ]; then
+        base_dir="$GITHUB_WORKSPACE"
+    fi
+    
+    local build_dir="${base_dir}/build/${contract}"
     local wasm_file="${build_dir}/${contract}.wasm"
     local abi_file="${build_dir}/${contract}.abi"
+    
+    # Ensure paths are absolute
+    build_dir=$(realpath -m "$build_dir" 2>/dev/null || echo "$build_dir")
+    wasm_file=$(realpath -m "$wasm_file" 2>/dev/null || echo "$wasm_file")
+    abi_file=$(realpath -m "$abi_file" 2>/dev/null || echo "$abi_file")
     
     # Create build directory if it doesn't exist
     mkdir -p "$build_dir"
     chmod 777 "$build_dir" 2>/dev/null || true
+    
+    echo "=== Path Information ==="
+    echo "Base directory: $base_dir"
+    echo "Build directory: $build_dir"
+    echo "WASM file: $wasm_file"
+    echo "ABI file: $abi_file"
+    echo "Current directory: $(pwd)"
+    echo "Build directory contents:"
+    ls -la "$build_dir" 2>&1 || echo "Cannot list directory"
+    echo "======================="
     
     # Verify the contract was built
     if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ]; then
@@ -166,11 +186,20 @@ deploy_contract() {
         return 1
     fi
     
+    # Get the directory containing the wasm file
+    local wasm_dir=$(dirname "$wasm_file")
+    
+    echo "=== Deploying with paths ==="
+    echo "Contract directory: $wasm_dir"
+    echo "WASM file: $wasm_file"
+    echo "ABI file: $abi_file"
+    
     # Deploy the contract using cleos with the network endpoint
+    # Note: cleos set contract expects: [contract] [contract-dir] [wasm-file] [abi-file]
     local cleos_cmd=(
         cleos -u "$NETWORK_ENDPOINT"
         --print-request --print-response
-        set contract "$account" "$(dirname "$wasm_file")" "$wasm_file" "$abi_file"
+        set contract "$account" "$wasm_dir" "$wasm_file" "$abi_file"
         -p "$account@active"
     )
     

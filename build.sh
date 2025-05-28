@@ -72,6 +72,15 @@ build_contract() {
     # Ensure the directory is owned by the current user
     chown -R $(id -u):$(id -g) "$build_dir" 2>/dev/null || true
     
+    # Ensure the output directory exists
+    mkdir -p "$build_dir"
+    
+    # Print debug info
+    echo "=== Build Configuration ==="
+    echo "Source file: ${src_dir}/${contract}.cpp"
+    echo "Output directory: $build_dir"
+    echo "Current directory: $(pwd)"
+    
     # Compile the contract using cdt-cpp from the Docker container
     if cdt-cpp -abigen \
         -I "${src_dir}" \
@@ -81,6 +90,12 @@ build_contract() {
         -contract "${contract}" \
         -o "${build_dir}/${contract}.wasm" \
         "${src_dir}/${contract}.cpp"; then
+        
+        # Verify the files were created
+        echo "=== Build Output ==="
+        echo "WASM file: ${build_dir}/${contract}.wasm"
+        echo "ABI file: ${build_dir}/${contract}.abi"
+        ls -la "$build_dir" 2>&1 || echo "Cannot list build directory"
         
         echo "Successfully built $contract"
         return 0
