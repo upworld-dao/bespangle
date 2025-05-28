@@ -277,8 +277,7 @@ deploy_contract() {
         elif [ $status -eq 0 ]; then
             echo "✅ Contract deployed successfully!"
             echo "✅ Deployment completed successfully"
-            deployment_success=1
-            break
+            deployment_success=0
         else
             echo "❌ Deployment failed with unknown error:"
             echo "$output"
@@ -294,7 +293,7 @@ deploy_contract() {
         attempt=$((attempt + 1))
     done
     
-    if [ $deployment_success -eq 0 ]; then
+    if [ $deployment_success -ne 0 ]; then
         echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
         
         # Additional diagnostics
