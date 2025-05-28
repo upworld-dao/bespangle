@@ -194,21 +194,103 @@ deploy_contract() {
     echo "WASM file: $wasm_file"
     echo "ABI file: $abi_file"
     
+    # Function to buy RAM if needed
+    buy_ram() {
+        local payer=$1
+        local receiver=$2
+        local bytes=$3
+        
+        # Calculate EOS amount needed (1 KB = 0.1 EOS is a common rate, adjust as needed)
+        local eos_amount=$(echo "scale=4; $bytes / 10000" | bc)
+        # Ensure we buy at least 0.1 EOS worth of RAM
+        eos_amount=$(echo "$eos_amount + 0.1" | bc)
+        
+        echo "💰 Attempting to buy $bytes bytes of RAM for $receiver (cost: ~$eos_amount EOS)..."
+        
+        # Format the amount with 4 decimal places
+        local formatted_amount=$(printf "%.4f EOS" $eos_amount)
+        
+        echo "📝 Executing: cleos -u $NETWORK_ENDPOINT push action eosio buyram \"[$payer, $receiver, $formatted_amount]\" -p $payer@active"
+        
+        local output
+        output=$(cleos -u "$NETWORK_ENDPOINT" push action eosio buyram "[\"$payer\",\"$receiver\",\"$formatted_amount\"]" -p "$payer@active" 2>&1)
+        local status=$?
+        
+        if [ $status -ne 0 ]; then
+            echo "❌ Failed to buy RAM. Error:"
+            echo "$output"
+            return 1
+        else
+            echo "✅ Successfully bought RAM. Transaction details:"
+            echo "$output"
+            return 0
+        fi
+    }
+    
     # Deploy the contract using cleos with the network endpoint
-    # Note: cleos set contract expects: [contract] [contract-dir] [wasm-file] [abi-file]
-    local cleos_cmd=(
-        cleos -u "$NETWORK_ENDPOINT"
-        --print-request --print-response
-        set contract "$account" "$wasm_dir" "$wasm_file" "$abi_file"
-        -p "$account@active"
-    )
+    local max_retries=3
+    local attempt=1
+    local output
+    local status
     
-    if [ "$VERBOSE" -eq 1 ]; then
-        echo "Running: ${cleos_cmd[*]}"
-    fi
+    while [ $attempt -le $max_retries ]; do
+        echo "🚀 Deployment attempt $attempt of $max_retries..."
+        
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "Running: cleos -u $NETWORK_ENDPOINT set contract $account $wasm_dir $wasm_file $abi_file -p $account@active"
+        fi
+        
+        # Try to deploy the contract
+        output=$(cleos -u "$NETWORK_ENDPOINT" --print-request --print-response \
+            set contract "$account" "$wasm_dir" "$wasm_file" "$abi_file" \
+            -p "$account@active" 2>&1)
+        status=$?
+        
+        # Check for RAM error
+        if echo "$output" | grep -qi "insufficient[[:space:]]*ram"; then
+            echo "⚠️  Detected insufficient RAM error"
+            
+            # Extract the required RAM amount from the error message if possible
+            local needed_ram=$(echo "$output" | grep -oP '(?i)needs\s+\K[0-9,]+' | tail -1 | tr -d ',')
+            if [ -z "$needed_ram" ]; then
+                needed_ram=400000  # Default to 400KB if we can't parse the needed amount
+                echo "⚠️  Could not determine exact RAM needed, using default: $needed_ram bytes"
+            else
+                echo "🔍 Determined needed RAM: $needed_ram bytes"
+                # Add 25% buffer to the needed RAM to ensure enough for table data
+                needed_ram=$(($needed_ram * 125 / 100))
+                echo "📊 Buying RAM with 25% buffer: $needed_ram bytes"
+            fi
+            
+            # Try to buy more RAM
+            if ! buy_ram "$account" "$account" "$needed_ram"; then
+                echo "❌ Failed to buy RAM. Please manually add RAM to the account and try again."
+                return 1
+            fi
+            
+            # Wait a bit for the transaction to be processed
+            echo "⏳ Waiting for RAM allocation to complete..."
+            sleep 3
+        elif [ $status -eq 0 ]; then
+            echo "✅ Contract deployed successfully!"
+            return 0
+        else
+            echo "❌ Deployment failed with unknown error:"
+            echo "$output"
+            
+            # If we have retries left, wait a bit before trying again
+            if [ $attempt -lt $max_retries ]; then
+                local wait_time=$((attempt * 2))
+                echo "⏳ Waiting $wait_time seconds before retry..."
+                sleep $wait_time
+            fi
+        fi
+        
+        attempt=$((attempt + 1))
+    done
     
-    # Create a temporary file to capture command output
-    local temp_output=$(mktemp)
+    echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
+    return 1
     local start_time=$(date +%s)
     
     # Run the command and capture both stdout and stderr
