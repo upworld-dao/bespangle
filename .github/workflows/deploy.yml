@@ -123,8 +123,7 @@ jobs:
           # Check if deployment was successful
           if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
             echo "❌ Deployment encountered errors"
-            # Continue with other contracts even if one fails
-            continue
+            exit 1
           else
             echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"
           fi
