@@ -132,24 +132,15 @@ jobs:
           
           if [ -z "$WALLET_PASSWORD" ]; then
             echo "ERROR: Failed to extract wallet password"
-            echo "Wallet create output was: $WALLET_CREATE_OUTPUT"
             exit 1
           fi
-          
-          echo "Extracted wallet password: ${WALLET_PASSWORD:0:5}..."  # Only show first 5 chars for security
           
           # Save the password for future use in this session
           echo "$WALLET_PASSWORD" > ~/wallet_password.txt
           chmod 600 ~/wallet_password.txt
           
-          # Verify wallet is unlocked
-          if ! cleos wallet list | grep -q '"default\*"'; then
-            echo "Unlocking wallet..."
-            if ! cleos wallet unlock --password "$WALLET_PASSWORD"; then
-              echo "ERROR: Failed to unlock wallet"
-              exit 1
-            fi
-          fi
+          # The wallet is already unlocked after creation, no need to unlock again
+          echo "Wallet is ready"
           
           # Import the private key if provided
           if [ -n "$DEPLOYER_PRIVATE_KEY" ]; then
