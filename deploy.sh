@@ -58,7 +58,8 @@ load_network_config() {
     
     # Load network config
     local config_data
-    if ! config_data=$(jq -r ".networks.${network} // empty" "$NETWORK_CONFIG" 2>/dev/null); then
+    # Use jq with proper quoting to handle network names with special characters
+    if ! config_data=$(jq -r --arg net "$network" '.networks[$net] // empty' "$NETWORK_CONFIG" 2>/dev/null); then
         echo "ERROR: Failed to parse network config" >&2
         return 1
     fi
