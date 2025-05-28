@@ -183,57 +183,75 @@ The `./deploy.sh` script handles building and deploying the contracts.
 
 **Options:**
 
-- `-c, --config <file>`: Specify a configuration file (default: `config.env`).
-- `-a, --action <action>`: Action to perform:
-    - `build`: Compile contracts to WASM/ABI only. Network validation is skipped.
-    - `deploy`: Deploy pre-built WASM/ABI files. Requires network validation based on the current branch.
-    - `both` (default): Perform both `build` and `deploy`. Requires network validation.
-- `-t, --target <contracts>`: Comma-separated list of contract base names to target (e.g., `org,authority`). Default is `all`. This affects both build and deploy steps.
-- `-h, --help`: Display help message.
+- `-n, --network NETWORK`: Target network (e.g., `jungle4`, `mainnet`, `wax`, `telos`). Must match a key in `network_config.json`.
+- `-c, --contracts CONTRACTS`: Comma-separated list of contracts to process (default: `all`).
+- `-a, --action ACTION`: Action to perform: `build`, `deploy`, or `both` (default: `both`).
+- `-v, --verbose`: Enable verbose output for debugging.
+- `-h, --help`: Show help message.
 
-**Process:**
-
-1.  **Parse Arguments:** Reads command-line options.
-2.  **Load Config:** Sources `config.env` to load account names.
-3.  **Network Validation (if deploying):**
-    - Checks if the action involves deployment (`deploy` or `both`).
-    - Detects the current Git branch.
-    - Verifies if the branch name exists as a key in `network_config.json`.
-    - If valid, parses the corresponding endpoint, chain ID, and symbol.
-    - Generates `cleos_config.sh` with network details for potential use by other scripts (though `deploy.sh` uses the variables directly).
-4.  **Build Contracts (if building):**
-    - Iterates through the target contracts.
-    - Runs `eosio-cpp` for each contract specified in the script's build/deploy call list (near the end of the script) if it matches the `-t` target or if targeting `all`.
-5.  **Deploy Contracts (if deploying):**
-    - Iterates through the target contracts.
-    - Determines the correct deployment account using `get_contract_account` (checks for `NETWORK_CONTRACT_VARIABLE` then falls back to `CONTRACT_VARIABLE`).
-    - Runs `cleos set contract` and `cleos set account permission ... --add-code` for each contract specified in the script's build/deploy call list if it matches the `-t` target or if targeting `all`.
-
-**Example:**
+**Examples:**
 
 ```bash
-# Build all contracts locally (no deployment, no network check)
-./deploy.sh -a build
+# Build all contracts locally (no deployment)
+./deploy.sh -n jungle4 -a build
 
-# Build and deploy only the 'org' and 'authority' contracts from the 'jungle4' branch
-# (Assumes you are currently on the 'jungle4' branch)
-./deploy.sh -t org,authority
+# Deploy specific contracts to jungle4
+./deploy.sh -n jungle4 -c org,authority -a deploy
 
-# Deploy all contracts from the 'mainnet' branch (assumes build already done)
-# (Assumes you are currently on the 'mainnet' branch)
-./deploy.sh -a deploy
+# Build and deploy all contracts to mainnet
+./deploy.sh -n mainnet -a both
+
+# Deploy with verbose output
+./deploy.sh -n wax -a both -v
 ```
 
 ### GitHub Actions Workflow
 
-The `.github/workflows/deploy.yml` file defines an automated deployment process triggered on pushes to specific branches (`mainnet`, `jungle4`, `wax`, `telos`).
+The `.github/workflows/deploy.yml` file defines an automated deployment process that runs on pushes to specific branches or can be triggered manually.
 
-**Workflow:**
+**Triggering Deployments:**
 
-1.  **Checkout Code:** Gets the repository code.
-2.  **Setup Dependencies:** Installs the required Antelope CDT and `cleos` (Leap) versions.
-3.  **Configure Wallet:** Creates a `cleos` wallet and imports the `DEPLOYER_PRIVATE_KEY` (stored as a GitHub secret).
-4.  **Run Deployment Script:** Executes `./deploy.sh` (using the default `both` action). The script automatically detects the branch being pushed to and deploys to the corresponding network defined in `network_config.json`.
+1. **Automatic Deployment**: Push to any of these branches:
+   - `jungle4`
+   - `mainnet`
+   - `wax`
+   - `telos`
+
+2. **Manual Deployment**: Go to GitHub Actions → Workflows → Deploy Antelope Contracts → Run workflow
+   - Select the target network
+   - Click "Run workflow"
+
+**Workflow Steps:**
+
+1. **Checkout Code**: Gets the repository code
+2. **Setup Dependencies**:
+   - Installs Antelope CDT (v4.1.0)
+   - Installs Leap (v5.0.3)
+3. **Configure Wallet**:
+   - Creates and unlocks a wallet
+   - Imports the `DEPLOYER_PRIVATE_KEY` from GitHub Secrets
+4. **Determine Target Network**:
+   - For push events: Uses the branch name as the network
+   - For manual triggers: Uses the selected network
+5. **Verify Network Configuration**:
+   - Validates the network exists in `network_config.json`
+   - Checks contract accounts are configured
+6. **Deploy Contracts**:
+   - Builds contracts if needed
+   - Deploys to the target network
+   - Provides detailed success/failure reporting
+
+**Required Secrets:**
+
+- `DEPLOYER_PRIVATE_KEY`: Private key with permission to deploy to the contract accounts
+
+### Best Practices
+
+1. **Branch Naming**: Always create feature branches from the target network branch
+2. **Pull Requests**: Open PRs to the target network branch for review
+3. **Testing**: Test deployments on `jungle4` before deploying to production networks
+4. **Secrets**: Never commit private keys to the repository
+5. **Verification**: After deployment, verify the contract on the blockchain explorer
 
 ## Contract Interactions
 

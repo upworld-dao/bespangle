@@ -4,23 +4,21 @@ on:
   push:
     branches:
       - 'jungle4'
-      - 'kylin'
       - 'mainnet'
-      - 'telos'
       - 'wax'
+      - 'telos'
   workflow_dispatch:
     inputs:
       network:
-        description: 'Network to deploy to'
+        description: 'Network to deploy to (must match branch name)'
         required: true
         default: 'jungle4'
         type: choice
         options:
           - jungle4
-          - kylin
           - mainnet
-          - telos
           - wax
+          - telos
 
 jobs:
   deploy:
@@ -41,14 +39,75 @@ jobs:
       
       - name: Configure Wallet
         env:
-          PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
         run: |
+          # Create wallet directory and set permissions
           mkdir -p ~/eosio-wallet
-          cleos wallet create --file ~/wallet_password.txt
-          cleos wallet unlock --password $(cat ~/wallet_password.txt)
-          cleos wallet import --private-key $PRIVATE_KEY
+          chmod 700 ~/eosio-wallet
+          
+          # Start keosd if not running
+          if ! pgrep -x "keosd" > /dev/null; then
+            echo "Starting keosd..."
+            keosd --http-server-address=127.0.0.1:8900 > /dev/null 2>&1 &
+            # Give keosd time to start
+            sleep 2
+          fi
+          
+          # Create wallet if it doesn't exist
+          if ! cleos wallet list 2>/dev/null | grep -q "default"; then
+            echo "Creating wallet..."
+            cleos wallet create --file ~/wallet_password.txt
+            
+            # Import the private key
+            echo "Importing private key..."
+            echo "$DEPLOYER_PRIVATE_KEY" | cleos wallet import --private-key
+            
+            # List keys to verify import
+            echo "Wallet keys:"
+            cleos wallet keys
+          else
+            echo "Wallet already exists, unlocking..."
+            cleos wallet unlock --password $(cat ~/wallet_password.txt 2>/dev/null || echo "")
+          fi
+          
+          # Verify wallet is unlocked and has keys
+          if ! cleos wallet list 2>/dev/null | grep -q '"default\*"'; then
+            echo "ERROR: Failed to unlock wallet" >&2
+            exit 1
+          fi
+          
+          echo "Wallet configured successfully"
       
-      - name: Deploy Contracts
+      - name: Determine target network
+        id: network
         run: |
+          # For manual triggers, use the input parameter; for push events, use the branch name
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "network=${{ github.event.inputs.network }}" >> $GITHUB_OUTPUT
+          else
+            # Extract branch name from ref (e.g., refs/heads/jungle4 -> jungle4)
+            BRANCH_NAME=${GITHUB_REF#refs/heads/}
+            echo "network=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify network configuration
+        run: |
+          if ! jq -e ".networks.${{ steps.network.outputs.network }}" network_config.json > /dev/null; then
+            echo "ERROR: No configuration found for network: ${{ steps.network.outputs.network }}"
+            exit 1
+          fi
+          echo "Deploying to network: ${{ steps.network.outputs.network }}"
+
+      - name: Deploy Contracts
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        run: |
+          # Make scripts executable
           chmod +x ./deploy.sh
-          ./deploy.sh --config config.env --action both --target all
+          chmod +x ./docker-run.sh
+          
+          # Run deployment for the target network
+          ./deploy.sh --network ${{ steps.network.outputs.network }} --action both
+          
+          # If we get here, the deployment was successful
+          echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"

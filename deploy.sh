@@ -74,6 +74,13 @@ load_network_config() {
     export SYSTEM_SYMBOL=$(echo "$config_data" | jq -r '.system_symbol')
     export SYSTEM_CONTRACT=$(echo "$config_data" | jq -r '.system_contract')
     
+    # Get skip contracts from config
+    local skip_contracts_json=$(jq -r '.skip_contracts // [] | join(" ")' "$NETWORK_CONFIG" 2>/dev/null)
+    if [ -n "$skip_contracts_json" ]; then
+        IFS=' ' read -r -a SKIP_CONTRACTS <<< "$skip_contracts_json"
+        export SKIP_CONTRACTS
+    fi
+    
     # Export accounts as environment variables
     local accounts=$(echo "$config_data" | jq -r '.accounts | to_entries[] | "export \(.key | ascii_upcase)=\"\(.value)\""')
     if [ -n "$accounts" ]; then
@@ -90,6 +97,10 @@ load_network_config() {
         echo ""
         echo "=== Contract Accounts ==="
         echo "$accounts" | sed 's/export //g'
+        if [ ${#SKIP_CONTRACTS[@]} -gt 0 ]; then
+            echo -e "\n=== Skipping Contracts ==="
+            printf "%s\n" "${SKIP_CONTRACTS[@]}"
+        fi
         echo "=========================="
     fi
 }
@@ -115,72 +126,104 @@ deploy_contract() {
     
     if [ -z "$account" ]; then
         echo "ERROR: No account configured for contract: $contract" >&2
+        echo "Available accounts in config: $(jq -r ".networks.${NETWORK}.accounts | keys[]" "$NETWORK_CONFIG" 2>/dev/null | tr '\n' ' ')" >&2
         return 1
     fi
     
+    echo "=== Deploying $contract to $account on $NETWORK ==="
+    
     # Handle both local and container paths
     local build_dir="build/${contract}"
-    if [ -d "/workspace" ]; then
+    if [ -d "/workspace" ]; then  # Inside GitHub Actions container
         build_dir="/workspace/${build_dir}"
     fi
     
     local wasm_file="${build_dir}/${contract}.wasm"
     local abi_file="${build_dir}/${contract}.abi"
     
-    echo "Deploying $contract..."
-    
     # Verify the contract was built
     if [ ! -f "$wasm_file" ] || [ ! -f "$abi_file" ]; then
         echo "ERROR: Contract files not found for $contract" >&2
+        echo "  - Expected WASM: $wasm_file" >&2
+        echo "  - Expected ABI: $abi_file" >&2
         echo "Please build the contract first using: ./build.sh --target $contract" >&2
         return 1
     fi
     
-    # Deploy the contract using cleos with the network endpoint
-    echo "Deploying $contract to account $account on $NETWORK..."
+    # Verify the account exists on the blockchain
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo "Verifying account $account exists on $NETWORK..."
+    fi
     
-    local cleos_cmd="cleos -u $NETWORK_ENDPOINT set contract $account $build_dir $wasm_file $abi_file -p $account@active"
+    if ! cleos -u "$NETWORK_ENDPOINT" get account "$account" >/dev/null 2>&1; then
+        echo "ERROR: Account $account does not exist on $NETWORK" >&2
+        echo "Please create the account and fund it with resources before deployment." >&2
+        return 1
+    fi
+    
+    # Deploy the contract using cleos with the network endpoint
+    local cleos_cmd=(
+        cleos -u "$NETWORK_ENDPOINT"
+        --print-request --print-response
+        set contract "$account" "$build_dir"
+        "$wasm_file" "$abi_file"
+        -p "$account@active"
+    )
     
     if [ "$VERBOSE" -eq 1 ]; then
-        echo "Running: $cleos_cmd"
+        echo "Running: ${cleos_cmd[*]}"
     fi
     
     # Create a temporary file to capture command output
     local temp_output=$(mktemp)
+    local start_time=$(date +%s)
     
     # Run the command and capture both stdout and stderr
-    if ! $cleos_cmd > "$temp_output" 2>&1; then
+    echo -n "Deploying $contract... "
+    if ! "${cleos_cmd[@]}" > "$temp_output" 2>&1; then
+        echo "❌ FAILED"
         echo "ERROR: Failed to deploy $contract to $NETWORK" >&2
-        echo "Command: $cleos_cmd" >&2
-        echo "Output:" >&2
+        echo "Command: ${cleos_cmd[*]}" >&2
+        echo -e "\n=== Error Output ===" >&2
         cat "$temp_output" >&2
-        rm -f "$temp_output"
         
         # Additional diagnostics
-        echo "\nDiagnostic information:" >&2
-        echo "- Network endpoint: $NETWORK_ENDPOINT" >&2
+        echo -e "\n=== Diagnostic Information ===" >&2
+        echo "- Network: $NETWORK" >&2
+        echo "- Endpoint: $NETWORK_ENDPOINT" >&2
+        echo "- Contract: $contract" >&2
         echo "- Account: $account" >&2
-        echo "- Build directory: $build_dir" >&2
-        echo "- WASM file exists: $(if [ -f "$wasm_file" ]; then echo "yes"; else echo "no"; fi)" >&2
-        echo "- ABI file exists: $(if [ -f "$abi_file" ]; then echo "yes"; else echo "no"; fi)" >&2
+        echo "- Build Directory: $build_dir" >&2
+        echo "- WASM File: $wasm_file $(if [ -f "$wasm_file" ]; then echo "✅"; else echo "❌ (MISSING)"; fi)" >&2
+        echo "- ABI File: $abi_file $(if [ -f "$abi_file" ]; then echo "✅"; else echo "❌ (MISSING)"; fi)" >&2
         
-        # Check if keosd is running
-        if ! pgrep -x "keosd" > /dev/null; then
-            echo "- keosd is not running" >&2
+        # Check wallet status
+        echo -e "\n=== Wallet Status ===" >&2
+        if ! cleos wallet list 2>&1; then
+            echo "- keosd is not running or not accessible" >&2
         else
-            echo "- keosd is running" >&2
+            echo -e "\n=== Wallet Keys ===" >&2
+            cleos wallet keys 2>&1 || true
         fi
         
+        rm -f "$temp_output"
         return 1
     fi
     
-    # If we get here, the command succeeded - show the output if verbose
-    if [ "$VERBOSE" -eq 1 ]; then
-        cat "$temp_output"
-    fi
-    rm -f "$temp_output"
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
     
-    echo "Successfully deployed $contract to $account"
+    # If we get here, the command succeeded
+    if [ "$VERBOSE" -eq 1 ]; then
+        echo -e "✅ SUCCESS (${duration}s)\n"
+        echo "=== Deployment Output ==="
+        cat "$temp_output"
+        echo -e "\n=========================="
+    else
+        echo "✅ SUCCESS (${duration}s)"
+    fi
+    
+    rm -f "$temp_output"
     return 0
 }
 
@@ -198,11 +241,12 @@ main() {
                 shift 2
                 ;;
             -a|--action)
-                ACTION="$2"
+                ACTION="$(echo "$2" | tr '[:upper:]' '[:lower:]')"
                 shift 2
                 ;;
             -v|--verbose)
                 VERBOSE=1
+                set -x  # Enable debug mode
                 shift
                 ;;
             -h|--help)
@@ -224,67 +268,151 @@ main() {
         exit 1
     fi
     
-    # Load network configuration
-    if ! load_network_config "$NETWORK"; then
+    # Validate action parameter
+    if [[ ! "$ACTION" =~ ^(build|deploy|both)$ ]]; then
+        echo "ERROR: Invalid action: $ACTION. Must be one of: build, deploy, both" >&2
+        print_usage
         exit 1
     fi
     
-    # Check current branch for informational purposes only
+    # Check for required commands
+    local required_commands=(jq cleos)
+    for cmd in "${required_commands[@]}"; do
+        if ! command -v "$cmd" &> /dev/null; then
+            echo "ERROR: Required command not found: $cmd" >&2
+            exit 1
+        fi
+    done
+    
+    echo -e "\n=== Starting Deployment ==="
+    echo "Network: $NETWORK"
+    echo "Action: $ACTION"
+    
+    # Load network configuration
+    echo -e "\nLoading network configuration..."
+    if ! load_network_config "$NETWORK"; then
+        echo "ERROR: Failed to load configuration for network: $NETWORK" >&2
+        exit 1
+    fi
+    
+    # Display current branch for informational purposes
     local current_branch
     current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
-    echo "INFO: Deploying to $NETWORK from branch: $current_branch"
+    echo -e "\nDeployment Details:"
+    echo "- Branch: $current_branch"
+    echo "- Network: $NETWORK"
+    echo "- Endpoint: $NETWORK_ENDPOINT"
+    echo "- Chain ID: $CHAIN_ID"
     
     # Determine which contracts to process
     local contracts_to_process=()
     if [ "$CONTRACTS" = "all" ]; then
         # Get all contract names from the accounts section
+        echo -e "\nDiscovering contracts for network: $NETWORK"
         contracts_to_process=($(jq -r ".networks.${NETWORK}.accounts | keys[]" "$NETWORK_CONFIG" 2>/dev/null))
+        
         if [ ${#contracts_to_process[@]} -eq 0 ]; then
-            echo "ERROR: No contracts found for network: $NETWORK" >&2
+            echo "ERROR: No contracts configured for network: $NETWORK" >&2
+            echo "Available networks: $(jq -r '.networks | keys | join(", ")' "$NETWORK_CONFIG" 2>/dev/null)" >&2
             exit 1
+        fi
+        
+        if [ "$VERBOSE" -eq 1 ]; then
+            echo "Found ${#contracts_to_process[@]} contracts to process"
         fi
     else
         # Convert comma-separated list to array
         IFS=',' read -r -a contracts_to_process <<< "$CONTRACTS"
+        echo -e "\nProcessing specified contracts: ${contracts_to_process[*]}"
     fi
     
     # Process each contract
+    local success_count=0
+    local fail_count=0
+    local skipped_count=0
+    local start_time=$(date +%s)
+    
+    echo -e "\n=== Starting $ACTION process ==="
+    
     for contract in "${contracts_to_process[@]}"; do
         contract=$(echo "$contract" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
         
         # Check if contract should be skipped
         if should_skip_contract "$contract"; then
-            echo "Skipping contract: $contract (in SKIP_CONTRACTS)"
+            echo -e "\n⚠️  Skipping contract: $contract (in SKIP_CONTRACTS)"
+            ((skipped_count++))
             continue
         fi
         
+        # Process based on action
         case "$ACTION" in
             build)
-                echo "=== Building $contract ==="
-                $BUILD_SCRIPT -t "$contract"
-                ;;
-            deploy)
-                echo "=== Deploying $contract ==="
-                deploy_contract "$contract"
-                ;;
-            both)
-                echo "=== Building and Deploying $contract ==="
+                echo -e "\n🔨 Building $contract..."
                 if $BUILD_SCRIPT -t "$contract"; then
-                    deploy_contract "$contract"
+                    echo "✅ Successfully built $contract"
+                    ((success_count++))
                 else
-                    echo "ERROR: Failed to build $contract" >&2
+                    echo "❌ Failed to build $contract" >&2
+                    ((fail_count++))
+                    [ "$VERBOSE" -eq 1 ] && continue
                     exit 1
                 fi
                 ;;
-            *)
-                echo "ERROR: Invalid action: $ACTION" >&2
-                print_usage
-                exit 1
+                
+            deploy)
+                if deploy_contract "$contract"; then
+                    ((success_count++))
+                else
+                    ((fail_count++))
+                    [ "$VERBOSE" -eq 1 ] && continue
+                    exit 1
+                fi
+                ;;
+                
+            both)
+                echo -e "\n🚀 Building and Deploying $contract"
+                if $BUILD_SCRIPT -t "$contract"; then
+                    echo "✅ Build successful, deploying..."
+                    if deploy_contract "$contract"; then
+                        ((success_count++))
+                    else
+                        ((fail_count++))
+                        [ "$VERBOSE" -eq 1 ] && continue
+                        exit 1
+                    fi
+                else
+                    echo "❌ Build failed for $contract" >&2
+                    ((fail_count++))
+                    [ "$VERBOSE" -eq 1 ] && continue
+                    exit 1
+                fi
                 ;;
         esac
     done
     
-    echo "=== Deployment to $NETWORK network complete! ==="
+    # Calculate duration
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    # Print summary
+    echo -e "\n=== Deployment Summary ==="
+    echo "Network:        $NETWORK"
+    echo "Action:         $ACTION"
+    echo "Duration:       ${duration}s"
+    echo "Total:          $((success_count + fail_count + skipped_count))"
+    echo -n "✅ Success:      $success_count"
+    [ $skipped_count -gt 0 ] && echo -n "   ⏩ Skipped: $skipped_count"
+    [ $fail_count -gt 0 ] && echo -n "   ❌ Failed: $fail_count"
+    echo -e "\n=========================="
+    
+    # Exit with error if any failures occurred
+    if [ $fail_count -gt 0 ]; then
+        echo "ERROR: $fail_count contract(s) failed to process" >&2
+        exit 1
+    fi
+    
+    echo -e "\n✨ Successfully completed $ACTION process for $success_count contract(s) on $NETWORK"
+    exit 0
 }
 
 # Run the main function
