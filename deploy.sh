@@ -275,12 +275,12 @@ deploy_contract() {
             continue
         fi
         
-        # Check if deployment was successful or if the code is the same
-        if [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set code because the new code is the same as the existing code"; then
+        # Check if deployment was successful or if the code/ABI is the same
+        if [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set \(code\|abi\) because the new \(code\|abi\) is the same as the existing"; then
             if [ $status -eq 0 ]; then
                 echo "✅ Contract deployed successfully"
             else
-                echo "ℹ️  Contract is already deployed with the same code"
+                echo "ℹ️  Contract is already up to date"
             fi
             deployment_success=1
             # Break out of the retry loop on success
@@ -577,7 +577,7 @@ main() {
                 output=$(deploy_contract "$contract" 2>&1)
                 status=$?
                 if [ $status -eq 0 ]; then
-                    if echo "$output" | grep -qi "already deployed with the same code"; then
+                    if echo "$output" | grep -qi "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
                         echo "✅ Contract already up to date: $contract"
                     else
                         echo "✅ Successfully deployed: $contract"
@@ -597,7 +597,7 @@ main() {
                 output=$(deploy_contract "$contract" 2>&1)
                 status=$?
                 if [ $status -eq 0 ]; then
-                    if echo "$output" | grep -qi "already deployed with the same code"; then
+                    if echo "$output" | grep -qi "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
                         echo "✅ Contract already up to date: $contract"
                     else
                         echo "✅ Successfully deployed: $contract"
