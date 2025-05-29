@@ -579,7 +579,7 @@ main() {
                 output=$(deploy_contract "$contract" 2>&1)
                 status=$?
                 if [ $status -eq 0 ]; then
-                    if echo "$output" | grep -qi "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
+                    if echo "$output" | grep -q -E -i "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
                         echo "✅ Contract already up to date: $contract"
                     else
                         echo "✅ Successfully deployed: $contract"
@@ -599,7 +599,7 @@ main() {
                 output=$(deploy_contract "$contract" 2>&1)
                 status=$?
                 if [ $status -eq 0 ]; then
-                    if echo "$output" | grep -qi "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
+                    if echo "$output" | grep -q -E -i "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
                         echo "✅ Contract already up to date: $contract"
                     else
                         echo "✅ Successfully deployed: $contract"
