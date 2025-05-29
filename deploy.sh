@@ -259,39 +259,48 @@ deploy_contract() {
             set contract "$account" "$wasm_dir" "$wasm_file" "$abi_file" \
             -p "$account@active" 2>&1)
         status=$?
+        echo "[DEBUG] cleos set contract exit status: $status"
+        if [ $status -ne 0 ]; then
+            echo "[DEBUG] cleos set contract output:\n$output"
+        fi
+        echo "[DEBUG] Checking for insufficient RAM error in cleos output..."
         
-        # Check for RAM error
-        if echo "$output" | grep -qi "insufficient[[:space:]]*ram"; then
+        # Check for RAM error (robust multi-pattern detection)
+        if echo "$output" | grep -Eqi "insufficient[[:space:]]*ram|ram_usage_exceeded|not enough ram|needs [0-9,]+ bytes|account does not have enough RAM|cannot create table"; then
+            echo "[DEBUG] Entered insufficient RAM error handling block."
             echo "⚠️  Detected insufficient RAM error"
-            
-            # Extract the required RAM amount from the error message if possible
-            local needed_ram=$(echo "$output" | grep -oP '(?i)needs\s+\K[0-9,]+' | tail -1 | tr -d ',')
+
+            # Robustly extract the required RAM amount from error message
+            local needed_ram=""
+            # Try to extract from 'needs N bytes has M bytes' format
+            needed_ram=$(echo "$output" | grep -oE 'needs[[:space:]]+[0-9,]+[[:space:]]+bytes' | grep -oE '[0-9,]+' | head -1 | tr -d ',')
+            if [ -z "$needed_ram" ]; then
+                # Fallback to old pattern if above fails
+                needed_ram=$(echo "$output" | grep -oP '(?i)needs\s+\K[0-9,]+' | tail -1 | tr -d ',')
+            fi
             if [ -z "$needed_ram" ]; then
                 needed_ram=400000  # Default to 400KB if we can't parse the needed amount
                 echo "⚠️  Could not determine exact RAM needed, using default: $needed_ram bytes"
             else
-                echo "🔍 Determined needed RAM: $needed_ram bytes"
-                # Add 25% buffer to the needed RAM to ensure enough for table data
-                # Using awk for floating point math to avoid bc dependency
-                local buffered_ram_output
-                buffered_ram_output=$(awk -v ram="$needed_ram" 'BEGIN { printf "%.0f", ram * 1.25 }' 2>&1)
-                if [ $? -ne 0 ]; then
-                    echo "ERROR: awk failed calculating RAM buffer for $contract. Input RAM: $needed_ram. Error: $buffered_ram_output" >&2
-                    # Continue to attempt RAM purchase with unbuffered amount or let buy_ram handle default if needed_ram is now empty
-                    # but log the awk failure. The script will likely fail at buy_ram if needed_ram is bad.
-                else
-                    needed_ram="$buffered_ram_output"
-                fi
-                echo "📊 Buying RAM with 25% buffer (or original if buffer calc failed): $needed_ram bytes"
+                echo "🔍 Determined needed RAM from error message: $needed_ram bytes"
             fi
 
+            # Add 25% buffer to the needed RAM to ensure enough for table data
+            local buffered_ram_output
+            buffered_ram_output=$(awk -v ram="$needed_ram" 'BEGIN { printf "%.0f", ram * 1.25 }' 2>&1)
+            if [ $? -ne 0 ]; then
+                echo "ERROR: awk failed calculating RAM buffer for $contract. Input RAM: $needed_ram. Error: $buffered_ram_output" >&2
+                # Continue to attempt RAM purchase with unbuffered amount or let buy_ram handle default if needed_ram is now empty
+            else
+                needed_ram="$buffered_ram_output"
+            fi
+            echo "📊 Buying RAM with 25% buffer (or original if buffer calc failed): $needed_ram bytes"
             echo "[DEBUG] Attempting to buy RAM for $account: $needed_ram bytes"
             # Try to buy more RAM
             if ! buy_ram "$account" "$account" "$needed_ram"; then
                 echo "❌ Failed to buy RAM. Please manually add RAM to the account and try again."
                 return 1
             fi
-
             # If we get here, RAM was successfully purchased, so we can retry the deployment
             attempt=$((attempt + 1))
             echo "[DEBUG] RAM purchased. Incremented attempt to $attempt for $contract"
