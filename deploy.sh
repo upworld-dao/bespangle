@@ -272,6 +272,7 @@ deploy_contract() {
             fi
             
             # If we get here, RAM was successfully purchased, so we can retry the deployment
+            attempt=$((attempt + 1))
             continue
         fi
         
@@ -281,26 +282,8 @@ deploy_contract() {
                 echo "✅ Contract deployed successfully"
             else
                 echo "ℹ️  Contract is already up to date"
-                # Set status to 0 to indicate success for already up-to-date contracts
-                status=0
             fi
-            deployment_success=1
-            # Return success status (0) immediately
             return 0
-        fi
-        
-        # If we get here, the deployment failed
-        if [ $attempt -lt $max_retries ]; then
-            local wait_time=$((attempt * 2))
-            echo "⏳ Waiting $wait_time seconds before retry..."
-            sleep $wait_time
-        fi
-        
-        attempt=$((attempt + 1))
-    done
-    
-    # If we get here, all retries failed
-    return 1
         else
             echo "❌ Deployment failed with error:"
             echo "======================================"
@@ -313,7 +296,7 @@ deploy_contract() {
             # Check for common errors and provide suggestions
             if echo "$output" | grep -qi "insufficient[[:space:]]*ram"; then
                 echo "💡 Insufficient RAM error detected. Consider buying more RAM for the account."
-                echo "   Try: cleos -u $NETWORK_ENDPOINT system buyram $account $account "RAM_AMOUNT""
+                echo "   Try: cleos -u $NETWORK_ENDPOINT system buyram $account $account \"RAM_AMOUNT\""
             elif echo "$output" | grep -qi "transaction[[:space:]]*net[[:space:]]*usage[[:space:]]*is[[:space:]]*too[[:space:]]*high"; then
                 echo "💡 Transaction too large. Try deploying with fewer contracts at once."
             elif echo "$output" | grep -qi "missing[[:space:]]*authority"; then
@@ -328,51 +311,24 @@ deploy_contract() {
                 local wait_time=$((attempt * 2))
                 echo "⏳ Waiting $wait_time seconds before retry..."
                 sleep $wait_time
+                attempt=$((attempt + 1))
+                continue
+            else
+                echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
+                return 1
             fi
         fi
-        
-        attempt=$((attempt + 1))
     done
     
-    if [ $deployment_success -eq 0 ]; then
-        echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
-        
-        # Additional diagnostics
-        echo -e "\n=== Diagnostic Information ===" >&2
-        echo "- Network: $NETWORK" >&2
-        echo "- Endpoint: $NETWORK_ENDPOINT" >&2
-        echo "- Contract: $contract" >&2
-        echo "- Account: $account" >&2
-        echo "- Build Directory: $build_dir" >&2
-        echo "- WASM File: $wasm_file $(if [ -f "$wasm_file" ]; then echo "✅"; else echo "❌ (MISSING)"; fi)" >&2
-        echo "- ABI File: $abi_file $(if [ -f "$abi_file" ]; then echo "✅"; else echo "❌ (MISSING)"; fi)" >&2
-        
-        # Check wallet status
-        echo -e "\n=== Wallet Status ===" >&2
-        if ! cleos wallet list 2>&1; then
-            echo "- keosd is not running or not accessible" >&2
-        else
-            echo -e "\n=== Wallet Keys ===" >&2
-            cleos wallet keys 2>&1 || true
-        fi
-        
-        return 1
-    fi
-    
-    # If we get here, deployment was either successful or contract was already up to date
-    if [ $deployment_success -eq 1 ]; then
-        # Return success for both successful deployment and already up to date
-        return 0
-    else
-        # This should theoretically never be reached due to the check above, but just in case
-        echo "❌ Deployment failed but reached unexpected code path" >&2
-        return 1
-    fi
+    # This function should never reach here due to the return statements in the while loop
+    echo "❌ Reached unexpected code path in deploy_contract function" >&2
+    return 1
 }
 
 # Function to set up the wallet
 setup_wallet() {
-    echo "Setting up wallet..."
+        echo "Setting up wallet..."
+{{ ... }}
     
     # Create wallet directory and set permissions
     mkdir -p ~/eosio-wallet
