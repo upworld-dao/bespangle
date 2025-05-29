@@ -540,6 +540,7 @@ main() {
     fi
     
     # Process each contract for deployment
+    local deployment_output=""
     for contract in "${contracts_to_process[@]}"; do
         contract=$(echo "$contract" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
         
@@ -558,14 +559,18 @@ main() {
                 if [ $status -eq 0 ]; then
                     if echo "$output" | grep -q -E -i "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
                         echo "✅ Contract already up to date: $contract"
+                        deployment_output+="✅ Contract already up to date: $contract\n"
+                        ((skipped_count++))
                     else
                         echo "✅ Successfully deployed: $contract"
+                        deployment_output+="✅ Successfully deployed: $contract\n"
+                        ((success_count++))
                     fi
-                    ((success_count++))
                 else
                     echo "❌ Deployment failed for $contract" >&2
                     echo "Error details:" >&2
                     echo "$output" >&2
+                    deployment_output+="❌ Deployment failed for $contract\n"
                     ((fail_count++))
                 fi
                 ;;
@@ -578,14 +583,18 @@ main() {
                 if [ $status -eq 0 ]; then
                     if echo "$output" | grep -q -E -i "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
                         echo "✅ Contract already up to date: $contract"
+                        deployment_output+="✅ Contract already up to date: $contract\n"
+                        ((skipped_count++))
                     else
                         echo "✅ Successfully deployed: $contract"
+                        deployment_output+="✅ Successfully deployed: $contract\n"
+                        ((success_count++))
                     fi
-                    ((success_count++))
                 else
                     echo "❌ Deployment failed for $contract after retries" >&2
                     echo "Error details:" >&2
                     echo "$output" >&2
+                    deployment_output+="❌ Deployment failed for $contract\n"
                     ((fail_count++))
                 fi
                 ;;
@@ -623,8 +632,10 @@ main() {
         echo -e "\n🔍 Failed Contract Details:"
         echo "----------------------------------------"
         for contract in "${contracts_to_process[@]}"; do
-            # Just list the failed contracts without redeploying
-            if ! deploy_contract "$contract" 2>/dev/null; then
+            # Just list the contracts that failed during the main deployment
+            # We already know which ones failed from the main loop
+            if ! grep -q "✅ Successfully deployed: $contract" <<< "$deployment_output" && 
+               ! grep -q "✅ Contract already up to date: $contract" <<< "$deployment_output"; then
                 echo "❌ $contract - Failed to deploy"
             fi
         done
