@@ -259,9 +259,7 @@ deploy_contract() {
             set contract "$account" "$wasm_dir" "$wasm_file" "$abi_file" \
             -p "$account@active" 2>&1)
         status=$?
-        if [ $status -ne 0 ]; then
-        fi
-        
+
         # Print cleos output and fail if there was an error
         if [ $status -ne 0 ]; then
             # Propagate RAM errors and fail
