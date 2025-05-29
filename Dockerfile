@@ -70,17 +70,19 @@ RUN mkdir -p /workspace/build /home/developer \
     && chmod 755 /workspace \
     && chmod 775 /workspace/build
 
-# Set working directory and switch to non-root user
+# Set working directory
 WORKDIR /workspace
-USER ${USER_ID}:${GROUP_ID}
 
-# Copy package files and install dependencies with cache
+# Copy package files first (better layer caching)
 COPY --chown=${USER_ID}:${GROUP_ID} package*.json ./
 
-# Install npm dependencies with cache and clean up in one layer
-RUN --mount=type=cache,target=/home/developer/.npm \
-    npm install --prefer-offline --no-audit --no-fund \
+# Install npm dependencies as root first to avoid permission issues
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --prefer-offline --no-audit --no-fund --unsafe-perm \
     && npm cache clean --force
+
+# Switch to non-root user after npm install
+USER ${USER_ID}:${GROUP_ID}
 
 # Copy application code
 COPY --chown=${USER_ID}:${GROUP_ID} . .
