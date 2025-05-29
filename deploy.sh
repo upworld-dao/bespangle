@@ -631,7 +631,7 @@ main() {
         echo "----------------------------------------"
     fi
     
-    # Print final status and exit with appropriate code
+    # Print final status
     echo -e "\n=== Final Status ==="
     echo "✅ Success: $success_count"
     if [ $skipped_count -gt 0 ]; then
@@ -640,10 +640,10 @@ main() {
     if [ $fail_count -gt 0 ]; then
         echo "❌ Failed: $fail_count (see details above)" >&2
         echo -e "\n💡 Some contracts failed to deploy. Check the error messages above for details."
-        exit 1
+        return 1
     else
         echo -e "\n✅ All contracts processed successfully!"
-        exit 0
+        return 0
     fi
 }
 
@@ -652,18 +652,24 @@ set -x  # Enable debug output
 
 # Run main function
 main "$@"
-MAIN_EXIT=$?
+main_status=$?
 
-# Cleanup keosd after all contracts are processed
-cleanup_keosd $MAIN_EXIT
-CLEANUP_EXIT=$?
+# Clean up keosd process
+cleanup_keosd $main_status
+cleanup_status=$?
 
-# Use the main exit code unless cleanup failed and main succeeded
-if [ $MAIN_EXIT -eq 0 ] && [ $CLEANUP_EXIT -ne 0 ]; then
-    FINAL_EXIT=$CLEANUP_EXIT
+# Use the main status unless cleanup failed and main succeeded
+if [ $main_status -eq 0 ] && [ $cleanup_status -ne 0 ]; then
+    final_status=$cleanup_status
 else
-    FINAL_EXIT=$MAIN_EXIT
+    final_status=$main_status
 fi
 
-echo "=== Deployment completed with exit code: $FINAL_EXIT ==="
-exit $FINAL_EXIT
+# Print final status
+if [ $final_status -eq 0 ]; then
+    echo "✅ All deployments completed successfully"
+else
+    echo "❌ Deployment completed with errors" >&2
+fi
+
+exit $final_status
