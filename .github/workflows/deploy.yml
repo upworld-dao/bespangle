@@ -33,8 +33,19 @@ jobs:
           
       - name: Build Docker image
         run: |
-          # Build the development environment
-          docker build -t bespangle-dev-env -f Dockerfile .
+          # Enable Docker BuildKit
+          export DOCKER_BUILDKIT=1
+          
+          # Login to GitHub Container Registry if needed
+          echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin || true
+          
+          # Build with caching
+          docker build \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            --cache-from=type=gha,scope=${{ github.workflow }}-${{ github.ref_name }} \
+            --cache-to=type=gha,mode=max,scope=${{ github.workflow }}-${{ github.ref_name }} \
+            -t bespangle-dev-env \
+            -f Dockerfile .
           
       - name: Prepare build directory
         run: |

@@ -1,11 +1,16 @@
-# Use Ubuntu 22.04 as base
-FROM ubuntu:22.04
+# Use Ubuntu 22.04 as base for builder stage
+FROM ubuntu:22.04 as builder
 
 # Set environment variables
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    NODE_VERSION=20 \
+    LEAP_VERSION=5.0.3 \
+    CDT_VERSION=4.1.0
 
-# Install base dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Install base dependencies with BuildKit cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
     wget \
     ca-certificates \
     git \
@@ -16,37 +21,69 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js 20 LTS (latest stable)
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+# Install Node.js LTS
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
     && apt-get install -y nodejs \
-    && rm -rf /var/lib/apt/lists/*
-
-# Install latest npm
-RUN npm install -g npm@latest
+    && npm install -g npm@latest
 
 # Install Antelope Leap
-RUN mkdir -p /tmp/leap \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    mkdir -p /tmp/leap \
     && cd /tmp/leap \
-    && wget -q https://github.com/AntelopeIO/leap/releases/download/v5.0.3/leap_5.0.3_amd64.deb \
+    && wget -q https://github.com/AntelopeIO/leap/releases/download/v${LEAP_VERSION}/leap_${LEAP_VERSION}_amd64.deb \
     && apt-get update \
-    && apt-get install -y ./leap_5.0.3_amd64.deb \
-    && rm -rf /tmp/leap \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y ./leap_${LEAP_VERSION}_amd64.deb \
+    && rm -rf /tmp/leap
 
 # Install Antelope CDT
-ARG CDT_VERSION=4.1.0
-RUN mkdir -p /tmp/cdt \
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    mkdir -p /tmp/cdt \
     && cd /tmp/cdt \
     && wget -q https://github.com/AntelopeIO/cdt/releases/download/v${CDT_VERSION}/cdt_${CDT_VERSION}-1_amd64.deb \
     && apt-get update \
     && apt-get install -y ./cdt_${CDT_VERSION}-1_amd64.deb \
-    && rm -rf /tmp/cdt \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /tmp/cdt
+
+# Create final image
+FROM ubuntu:22.04
+
+# Copy only necessary files from builder
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /opt/eosio /opt/eosio
+COPY --from=builder /opt/antelope /opt/antelope
+COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
+COPY --from=builder /usr/bin/node /usr/bin/node
+COPY --from=builder /usr/bin/npm /usr/bin/npm
+COPY --from=builder /usr/bin/npx /usr/bin/npx
+
+# Set up environment
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/eosio/bin/:/opt/antelope/bin"
+ENV NODE_PATH="/usr/lib/node_modules"
+ENV DEBIAN_FRONTEND=noninteractive
 
 # Set up working directory
 WORKDIR /app
 
-# Copy project files
+# Install runtime dependencies
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy package files first to leverage Docker cache
+COPY package*.json ./
+
+# Install npm dependencies with cache
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --prefer-offline
+
+# Copy the rest of the application
 COPY . .
 
 # Make scripts executable
