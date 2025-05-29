@@ -571,22 +571,20 @@ main() {
                 ;;
                 
             both)
-                echo -e "\n🔨 Processing contract: $contract"
-                
-                # Build the contract in a subshell to prevent exit on error
-                echo "Building $contract..."
-                (
-                    # Run build script in a subshell to prevent it from exiting the main script
-                    if $BUILD_SCRIPT -t "$contract" 2>&1; then
-                        echo "✅ Build successful"
+                # First, build all contracts in a single operation
+                if [ -z "$BUILD_DONE" ]; then
+                    echo -e "\n🔨 Building all contracts..."
+                    if $BUILD_SCRIPT -t all 2>&1; then
+                        echo "✅ All contracts built successfully"
+                        BUILD_DONE=1
                     else
-                        echo "⚠️  Build had issues, but continuing to deployment..."
-                        # The subshell will exit with the build script's status, but we don't care
+                        echo "⚠️  Build had some issues, but continuing with deployment..."
+                        BUILD_DONE=1
                     fi
-                ) || true  # Always continue even if the subshell fails
+                fi
                 
-                # Always attempt to deploy
-                echo "Deploying $contract..."
+                # Now deploy the current contract
+                echo -e "\n🚀 Deploying contract: $contract"
                 if deploy_contract "$contract"; then
                     echo "✅ Successfully deployed $contract"
                     ((success_count++))
