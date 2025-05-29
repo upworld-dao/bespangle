@@ -281,6 +281,8 @@ deploy_contract() {
                 echo "✅ Contract deployed successfully"
             else
                 echo "ℹ️  Contract is already up to date"
+                # Set status to 0 to indicate success for already up-to-date contracts
+                status=0
             fi
             deployment_success=1
             # Break out of the retry loop on success
