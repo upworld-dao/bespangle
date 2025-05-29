@@ -273,6 +273,9 @@ deploy_contract() {
             
             # If we get here, RAM was successfully purchased, so we can retry the deployment
             continue
+        fi
+        
+        # Check if deployment was successful or if the code is the same
         if [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set code because the new code is the same as the existing code"; then
             if [ $status -eq 0 ]; then
                 echo "✅ Contract deployed successfully"
