@@ -270,7 +270,7 @@ deploy_contract() {
         # Flatten output to single line for robust grep
         output_flat=$(echo "$output" | tr '\n' ' ')
         # Check for RAM error (robust multi-pattern detection)
-        if echo "$output_flat" | grep -Eqi "insufficient[[:space:]]*ram|ram_usage_exceeded|not enough ram|needs [0-9,]+ bytes|account does not have enough RAM|cannot create table"; then
+        if echo "$output_flat" | grep -Eqi "insufficient[[:space:]]*ram|ram_usage_exceeded|not enough ram|needs [0-9,]+ bytes|account does not have enough RAM|cannot create table|no transaction is sent|Skipping set code because the new code is the same as the existing code"; then
             echo "[DEBUG] Entered insufficient RAM error handling block."
             echo "⚠️  Detected insufficient RAM error"
 
