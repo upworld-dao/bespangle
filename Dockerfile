@@ -73,15 +73,16 @@ RUN mkdir -p /workspace/build /home/developer \
 # Set working directory
 WORKDIR /workspace
 
-# Copy package files first (better layer caching)
-COPY --chown=${USER_ID}:${GROUP_ID} package*.json ./
+# Create tests directory and copy test dependencies
+RUN mkdir -p ./tests
+COPY --chown=${USER_ID}:${GROUP_ID} tests/package*.json ./tests/
 
-# Install npm dependencies as root first to avoid permission issues
-RUN --mount=type=cache,target=/root/.npm \
-    npm install --prefer-offline --no-audit --no-fund --unsafe-perm \
+# Install test dependencies as root
+RUN cd ./tests && \
+    npm install --prefer-offline --no-audit --no-fund \
     && npm cache clean --force
 
-# Switch to non-root user after npm install
+# Switch to non-root user after installation
 USER ${USER_ID}:${GROUP_ID}
 
 # Copy application code
