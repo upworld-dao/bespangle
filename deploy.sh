@@ -283,8 +283,8 @@ deploy_contract() {
                 echo "ℹ️  Contract is already deployed with the same code"
             fi
             deployment_success=1
-            # Successfully deployed or already deployed
-            return 0
+            # Break out of the retry loop on success
+            break
         else
             echo "❌ Deployment failed with error:"
             echo "======================================"
@@ -344,8 +344,14 @@ deploy_contract() {
     fi
     
     # If we get here, deployment was successful
-    # Explicitly return success (0) to ensure consistent behavior
-    return 0
+    if [ $deployment_success -eq 1 ]; then
+        # Only return success if we actually had a successful deployment
+        return 0
+    else
+        # This should theoretically never be reached due to the check above, but just in case
+        echo "❌ Deployment failed but reached unexpected code path" >&2
+        return 1
+    fi
 }
 
 # Function to set up the wallet
