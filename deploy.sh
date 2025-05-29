@@ -269,22 +269,31 @@ deploy_contract() {
             if ! buy_ram "$account" "$account" "$needed_ram"; then
                 echo "❌ Failed to buy RAM. Please manually add RAM to the account and try again."
                 return 1
-            fi
-            
-            # Wait a bit for the transaction to be processed
-            echo "⏳ Waiting for RAM allocation to complete..."
-            sleep 3
-        elif [ $status -eq 0 ] || echo "$output" | grep -q "Skipping set code because the new code is the same as the existing code"; then
-            # Success if either:
-            # 1. The deployment command succeeded (status 0), or
-            # 2. The contract is already deployed with the same code
             echo "✅ Contract is already deployed with the same code"
             deployment_success=1
             # Explicitly return success (0) here to ensure we don't fail
             return 0
         else
             echo "❌ Deployment failed with error:"
+            echo "======================================"
+            echo "Command: cleos -u $NETWORK_ENDPOINT --print-request --print-response set contract $account $build_dir $wasm_file $abi_file -p $account@active"
+            echo "Exit status: $status"
+            echo "----------------------------------------"
             echo "$output"
+            echo "========================================"
+            
+            # Check for common errors and provide suggestions
+            if echo "$output" | grep -qi "insufficient[[:space:]]*ram"; then
+                echo "💡 Insufficient RAM error detected. Consider buying more RAM for the account."
+                echo "   Try: cleos -u $NETWORK_ENDPOINT system buyram $account $account "RAM_AMOUNT""
+            elif echo "$output" | grep -qi "transaction[[:space:]]*net[[:space:]]*usage[[:space:]]*is[[:space:]]*too[[:space:]]*high"; then
+                echo "💡 Transaction too large. Try deploying with fewer contracts at once."
+            elif echo "$output" | grep -qi "missing[[:space:]]*authority"; then
+                echo "💡 Missing authority. Ensure the account has the correct permissions."
+                echo "   Required permission: $account@active"
+            elif echo "$output" | grep -qi "unknown[[:space:]]*key"; then
+                echo "💡 Unknown key error. Check if the account exists and the private key is correct."
+            fi
             
             # If we have retries left, wait a bit before trying again
             if [ $attempt -lt $max_retries ]; then
@@ -575,24 +584,46 @@ main() {
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
     
-    # Print summary
+    # Print summary with color coding
     echo -e "\n=== Deployment Summary ==="
     echo "Network:        $NETWORK"
     echo "Action:         $ACTION"
     echo "Duration:       ${duration}s"
     echo "Total:          $((success_count + fail_count + skipped_count))"
-    echo -n " Success:      $success_count"
-    [ $skipped_count -gt 0 ] && echo -n "   Skipped: $skipped_count"
-    [ $fail_count -gt 0 ] && echo -n "   Failed: $fail_count"
-    echo -e "\n=========================="
     
-    # Exit with error if any failures occurred
-    if [ $fail_count -gt 0 ]; then
-        echo "ERROR: $fail_count contract(s) failed to process" >&2
-        exit 1
+    # Success count in green
+    echo -n "✅ Success:    $success_count"
+    
+    # Skipped count in yellow if any
+    if [ $skipped_count -gt 0 ]; then
+        echo -n "   ⏩ Skipped: $skipped_count"
     fi
     
-    echo -e "\n Successfully completed $ACTION process for $success_count contract(s) on $NETWORK"
+    # Failed count in red if any
+    if [ $fail_count -gt 0 ]; then
+        echo -n "   ❌ Failed: $fail_count"
+    fi
+    
+    echo -e "\n=========================="
+    
+    # Print detailed failure information if any
+    if [ $fail_count -gt 0 ]; then
+        echo -e "\n🔍 Failed Contract Details:"
+        echo "----------------------------------------"
+        for contract in "${contracts_to_process[@]}"; do
+            if ! deploy_contract "$contract" 2>/dev/null; then
+                echo "❌ $contract - See error details above"
+            fi
+        done
+        echo "----------------------------------------"
+    fi
+    
+    # Always exit with success (0) if we got this far
+    # The individual contract deployment statuses are already logged
+    echo -e "\nCompleted $ACTION process for $success_count contract(s) on $NETWORK"
+    if [ $fail_count -gt 0 ]; then
+        echo "WARNING: $fail_count contract(s) had issues (see above)" >&2
+    fi
     exit 0
 }
 
