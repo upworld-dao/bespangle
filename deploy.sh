@@ -255,7 +255,7 @@ deploy_contract() {
         fi
         
         # Try to deploy the contract
-        output=$(cleos -u "$NETWORK_ENDPOINT" --print-request --print-response \
+        output=$(cleos -u "$NETWORK_ENDPOINT" \
             set contract "$account" "$wasm_dir" "$wasm_file" "$abi_file" \
             -p "$account@active" 2>&1)
         status=$?
