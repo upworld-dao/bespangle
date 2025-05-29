@@ -580,11 +580,13 @@ main() {
             both)
                 # Now deploy the current contract
                 echo -e "\n🚀 Deploying contract: $contract"
-                if deploy_contract "$contract"; then
-                    echo "✅ Successfully deployed $contract"
+                if output=$(deploy_contract "$contract" 2>&1); then
+                    echo "✅ Successfully deployed or already up to date: $contract"
                     ((success_count++))
                 else
                     echo "❌ Deployment failed for $contract after retries" >&2
+                    echo "Error details:" >&2
+                    echo "$output" >&2
                     ((fail_count++))
                 fi
                 ;;
