@@ -504,14 +504,15 @@ main() {
     local contracts_to_process
     if [ "$CONTRACTS" = "all" ]; then
         echo -e "\nDiscovering contracts for network: $NETWORK"
-        contracts_to_process=($(jq -r --arg net "$NETWORK" '.networks[$net].accounts | keys[]' "$NETWORK_CONFIG" 2>/dev/null))
+        mapfile -t contracts_to_process < <(jq -r --arg net "$NETWORK" '.networks[$net].accounts | keys[]' "$NETWORK_CONFIG" 2>/dev/null)
+        echo "DEBUG: contracts_to_process = ${contracts_to_process[*]}"
         if [ ${#contracts_to_process[@]} -eq 0 ]; then
             echo "ERROR: No contracts configured for network: $NETWORK" >&2
             echo "Available networks: $(jq -r '.networks | keys | join(", ")' "$NETWORK_CONFIG" 2>/dev/null)" >&2
             exit 1
         fi
         if [ "$VERBOSE" -eq 1 ]; then
-            echo "Found ${#contracts_to_process[@]} contracts to process"
+            echo "Found ${#contracts_to_process[@]} contracts to process: ${contracts_to_process[*]}"
         fi
     else
         IFS=',' read -r -a contracts_to_process <<< "$CONTRACTS"
@@ -655,20 +656,7 @@ main() {
             fi
         done
         echo "----------------------------------------"
-    fi
-    
-    # Print final status
-    echo -e "\n=== Final Status ==="
-    echo "✅ Success: $success_count"
-    if [ $skipped_count -gt 0 ]; then
-        echo "⏩ Skipped: $skipped_count"
-    fi
-    if [ $fail_count -gt 0 ]; then
-        echo "❌ Failed: $fail_count (see details above)" >&2
         echo -e "\n💡 Some contracts failed to deploy. Check the error messages above for details."
-        return 1
-    elif [ $success_count -eq 0 ] && [ $skipped_count -eq 0 ]; then
-        echo "ℹ️  No contracts were processed. Please check your configuration."
         return 1
     else
         echo -e "\n✅ All contracts processed successfully!"
