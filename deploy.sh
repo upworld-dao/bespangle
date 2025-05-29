@@ -269,6 +269,11 @@ deploy_contract() {
             if ! buy_ram "$account" "$account" "$needed_ram"; then
                 echo "❌ Failed to buy RAM. Please manually add RAM to the account and try again."
                 return 1
+            fi
+            
+            # If we get here, RAM was successfully purchased, so we can retry the deployment
+            continue
+        elif [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set code because the new code is the same as the existing code"; then
             echo "✅ Contract is already deployed with the same code"
             deployment_success=1
             # Explicitly return success (0) here to ensure we don't fail
