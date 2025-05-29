@@ -84,7 +84,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} package*.json ./
 
 # Install npm dependencies with cache
 RUN --mount=type=cache,target=/home/developer/.npm \
-    npm ci --prefer-offline
+    npm install --prefer-offline
 
 # Copy the rest of the application
 COPY --chown=${USER_ID}:${GROUP_ID} . .
