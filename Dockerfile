@@ -5,116 +5,108 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive \
     NODE_VERSION=20 \
     LEAP_VERSION=5.0.3 \
-    CDT_VERSION=4.1.0
+    CDT_VERSION=4.1.0 \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_CACHE=/tmp/npm-cache \
+    NODE_PATH=/usr/lib/node_modules \
+    LEAP_PATH=/usr/opt/leap/${LEAP_VERSION} \
+    CDT_PATH=/usr/opt/cdt/${CDT_VERSION} \
+    PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${LEAP_PATH}/bin:${CDT_PATH}/bin"
 
-# Install base dependencies with BuildKit cache
+# Create non-root user early for better layer caching
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN groupadd -g ${GROUP_ID} developer 2>/dev/null || true \
+    && useradd -u ${USER_ID} -g ${GROUP_ID} -m developer 2>/dev/null || true
+
+# Install base dependencies with BuildKit cache and cleanup in one layer
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
     apt-get update && apt-get install -y --no-install-recommends \
-    wget \
     ca-certificates \
+    curl \
+    wget \
     git \
     build-essential \
-    curl \
     cmake \
     make \
     jq \
+    gnupg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Node.js LTS
+# Install Node.js from NodeSource with verification
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | bash - \
-    && apt-get install -y nodejs \
-    && npm install -g npm@latest
+    mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g npm@latest \
+    && npm cache clean --force \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install Antelope Leap
+# Install Antelope Leap and CDT in one layer
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    mkdir -p /tmp/leap \
-    && cd /tmp/leap \
+    mkdir -p /tmp/install \
+    && cd /tmp/install \
+    # Install Leap
     && wget -q https://github.com/AntelopeIO/leap/releases/download/v${LEAP_VERSION}/leap_${LEAP_VERSION}_amd64.deb \
     && apt-get update \
     && apt-get install -y ./leap_${LEAP_VERSION}_amd64.deb \
-    && rm -rf /tmp/leap
-
-# Install Antelope CDT
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    mkdir -p /tmp/cdt \
-    && cd /tmp/cdt \
+    # Install CDT
     && wget -q https://github.com/AntelopeIO/cdt/releases/download/v${CDT_VERSION}/cdt_${CDT_VERSION}-1_amd64.deb \
-    && apt-get update \
     && apt-get install -y ./cdt_${CDT_VERSION}-1_amd64.deb \
-    && rm -rf /tmp/cdt
+    # Cleanup
+    && apt-get clean \
+    && rm -rf /tmp/install /var/lib/apt/lists/*
 
-# Install runtime dependencies
-RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
-    --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
-
-# Set up environment
-ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/opt/leap/${LEAP_VERSION}/bin:/usr/opt/cdt/${CDT_VERSION}/bin"
-ENV NODE_PATH="/usr/lib/node_modules"
-ENV LEAP_PATH="/usr/opt/leap/${LEAP_VERSION}"
-ENV CDT_PATH="/usr/opt/cdt/${CDT_VERSION}"
-
-# Create a non-root user with the same UID/GID as the host user
-ARG USER_ID=1000
-ARG GROUP_ID=1000
-
-# Create a user and group if they don't exist
-RUN groupadd -g ${GROUP_ID} developer 2>/dev/null || true \
-    && useradd -u ${USER_ID} -g ${GROUP_ID} -m developer 2>/dev/null || true \
-    && mkdir -p /workspace/build \
-    && mkdir -p /home/developer \
-    && chown -R ${USER_ID}:${GROUP_ID} /workspace \
-    && chown -R ${USER_ID}:${GROUP_ID} /home/developer \
+# Set up workspace and permissions
+RUN mkdir -p /workspace/build /home/developer \
+    && chown -R ${USER_ID}:${GROUP_ID} /workspace /home/developer \
     && chmod 755 /workspace \
     && chmod 775 /workspace/build
 
-# Set up working directories
+# Set working directory and switch to non-root user
 WORKDIR /workspace
+USER ${USER_ID}:${GROUP_ID}
 
-# Copy package files first to leverage Docker cache
+# Copy package files and install dependencies with cache
 COPY --chown=${USER_ID}:${GROUP_ID} package*.json ./
 
-# Install npm dependencies with cache
+# Install npm dependencies with cache and clean up in one layer
 RUN --mount=type=cache,target=/home/developer/.npm \
-    npm install --prefer-offline
+    npm ci --prefer-offline --no-audit --no-fund \
+    && npm cache clean --force
 
-# Copy the rest of the application
+# Copy application code
 COPY --chown=${USER_ID}:${GROUP_ID} . .
 
-# Make scripts executable
-RUN chmod +x *.sh
-
-# Verify installations
-RUN echo "Node.js version: $(node --version)" \
+# Make scripts executable and verify installations
+RUN chmod +x *.sh \
+    && echo "Node.js version: $(node --version)" \
     && echo "npm version: $(npm --version)" \
     && echo "Leap version: $(cleos version client)" \
     && echo "CDT version: $(cdt-cpp --version)" \
     && cdt-cpp --version | grep "${CDT_VERSION}" || true
 
-# Install Node.js dependencies for the tests
+# Install test dependencies
 USER root
-RUN cd tests && npm install --unsafe-perm
+RUN --mount=type=cache,target=/home/developer/.npm \
+    cd tests \
+    && npm ci --prefer-offline --no-audit --no-fund \
+    && chown -R ${USER_ID}:${GROUP_ID} node_modules package*.json
 
-# Change ownership of node_modules and package files to the non-root user
-RUN chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/node_modules \
-    /workspace/tests/package*.json \
-    /workspace/tests/package-lock.json
-
-# Switch to non-root user for safety
+# Switch back to non-root user and set final environment
 USER ${USER_ID}:${GROUP_ID}
+ENV HOME=/home/developer \
+    GIT_CONFIG_NOSYSTEM=1
 
-# Set environment variables for the user
-ENV HOME=/home/developer
-ENV GIT_CONFIG_NOSYSTEM=1
-
-# Create a local git config that won't require root permissions
+# Configure git to work without system config
 RUN mkdir -p /home/developer/.config/git \
     && git config --file /home/developer/.gitconfig safe.directory /workspace
+
+# Health check to verify services are running
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node --version && cleos version client && cdt-cpp --version
