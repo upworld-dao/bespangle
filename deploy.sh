@@ -327,8 +327,7 @@ deploy_contract() {
 
 # Function to set up the wallet
 setup_wallet() {
-        echo "Setting up wallet..."
-{{ ... }}
+    echo "Setting up wallet..."
     
     # Create wallet directory and set permissions
     mkdir -p ~/eosio-wallet
