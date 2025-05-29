@@ -556,6 +556,8 @@ main() {
             return 0
         fi
 
+        echo "[DEBUG] Proceeding to deployment phase for contracts: ${contracts_to_process[*]}"
+
     # Process each contract for deployment
     local deployment_output=""
     for contract in "${contracts_to_process[@]}"; do
