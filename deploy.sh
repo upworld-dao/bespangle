@@ -343,9 +343,9 @@ deploy_contract() {
         return 1
     fi
     
-    # If we get here, deployment was successful
+    # If we get here, deployment was either successful or contract was already up to date
     if [ $deployment_success -eq 1 ]; then
-        # Only return success if we actually had a successful deployment
+        # Return success for both successful deployment and already up to date
         return 0
     else
         # This should theoretically never be reached due to the check above, but just in case
@@ -574,11 +574,19 @@ main() {
         case "$ACTION" in
             deploy)
                 echo -e "\n🚀 Deploying contract: $contract"
-                if deploy_contract "$contract"; then
-                    echo "✅ Deployment successful for $contract"
+                output=$(deploy_contract "$contract" 2>&1)
+                status=$?
+                if [ $status -eq 0 ]; then
+                    if echo "$output" | grep -qi "already deployed with the same code"; then
+                        echo "✅ Contract already up to date: $contract"
+                    else
+                        echo "✅ Successfully deployed: $contract"
+                    fi
                     ((success_count++))
                 else
                     echo "❌ Deployment failed for $contract" >&2
+                    echo "Error details:" >&2
+                    echo "$output" >&2
                     ((fail_count++))
                 fi
                 ;;
@@ -586,8 +594,14 @@ main() {
             both)
                 # Now deploy the current contract
                 echo -e "\n🚀 Deploying contract: $contract"
-                if output=$(deploy_contract "$contract" 2>&1); then
-                    echo "✅ Successfully deployed or already up to date: $contract"
+                output=$(deploy_contract "$contract" 2>&1)
+                status=$?
+                if [ $status -eq 0 ]; then
+                    if echo "$output" | grep -qi "already deployed with the same code"; then
+                        echo "✅ Contract already up to date: $contract"
+                    else
+                        echo "✅ Successfully deployed: $contract"
+                    fi
                     ((success_count++))
                 else
                     echo "❌ Deployment failed for $contract after retries" >&2
