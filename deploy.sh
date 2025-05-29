@@ -284,40 +284,46 @@ deploy_contract() {
                 echo "ℹ️  Contract is already up to date"
             fi
             return 0
-        else
-            echo "❌ Deployment failed with error:"
-            echo "======================================"
-            echo "Command: cleos -u $NETWORK_ENDPOINT --print-request --print-response set contract $account $build_dir $wasm_file $abi_file -p $account@active"
-            echo "Exit status: $status"
-            echo "----------------------------------------"
-            echo "$output"
-            echo "========================================"
-            
-            # Check for common errors and provide suggestions
-            if echo "$output" | grep -qi "insufficient[[:space:]]*ram"; then
-                echo "💡 Insufficient RAM error detected. Consider buying more RAM for the account."
-                echo "   Try: cleos -u $NETWORK_ENDPOINT system buyram $account $account \"RAM_AMOUNT\""
-            elif echo "$output" | grep -qi "transaction[[:space:]]*net[[:space:]]*usage[[:space:]]*is[[:space:]]*too[[:space:]]*high"; then
-                echo "💡 Transaction too large. Try deploying with fewer contracts at once."
-            elif echo "$output" | grep -qi "missing[[:space:]]*authority"; then
-                echo "💡 Missing authority. Ensure the account has the correct permissions."
-                echo "   Required permission: $account@active"
-            elif echo "$output" | grep -qi "unknown[[:space:]]*key"; then
-                echo "💡 Unknown key error. Check if the account exists and the private key is correct."
-            fi
-            
-            # If we have retries left, wait a bit before trying again
-            if [ $attempt -lt $max_retries ]; then
-                local wait_time=$((attempt * 2))
-                echo "⏳ Waiting $wait_time seconds before retry..."
-                sleep $wait_time
-                attempt=$((attempt + 1))
-                continue
-            else
-                echo "❌ All $max_retries deployment attempts failed. Please check the account's resources and try again."
-                return 1
-            fi
         fi
+
+        # If we get here, there was an error
+        echo "❌ Deployment failed with error:"
+        echo "======================================"
+        echo "Command: cleos -u $NETWORK_ENDPOINT --print-request --print-response set contract $account $build_dir $wasm_file $abi_file -p $account@active"
+        echo "Exit status: $status"
+        echo "----------------------------------------"
+        echo "$output"
+        echo "========================================"
+        
+        # Check for common errors and provide suggestions
+        if echo "$output" | grep -qi "insufficient[[:space:]]*ram"; then
+            echo "💡 Insufficient RAM error detected. Consider buying more RAM for the account."
+            echo "   Try: cleos -u $NETWORK_ENDPOINT system buyram $account $account \"RAM_AMOUNT\""
+        elif echo "$output" | grep -qi "transaction[[:space:]]*net[[:space:]]*usage[[:space:]]*is[[:space:]]*too[[:space:]]*high"; then
+            echo "💡 Transaction too large. Try deploying with fewer contracts at once."
+            return 1
+        elif echo "$output" | grep -qi "missing[[:space:]]*authority"; then
+            echo "💡 Missing authority. Ensure the account has the correct permissions."
+            echo "   Required permission: $account@active"
+            return 1
+        elif echo "$output" | grep -qi "unknown[[:space:]]*key"; then
+            echo "💡 Unknown key error. Check if the account exists and the private key is correct."
+            return 1
+        elif echo "$output" | grep -qi "does not exist"; then
+            echo "💡 Account does not exist. Please create the account first."
+            return 1
+        fi
+        
+        # If we've reached max attempts, give up
+        if [ $attempt -ge $MAX_ATTEMPTS ]; then
+            echo "❌ Max retry attempts reached for $account. Giving up."
+            return 1
+        fi
+        
+        # Otherwise, wait and retry
+        echo "🔄 Retrying deployment (attempt $((attempt + 1))/$MAX_ATTEMPTS)..."
+        sleep 2
+        attempt=$((attempt + 1))
     done
     
     # This function should never reach here due to the return statements in the while loop
