@@ -25,7 +25,419 @@ NETWORK_CONFIG="network_config.json"
 ACTION="both"
 CONTRACTS="all"
 VERBOSE=0
-NETWORK=""
+NETWORK=""Run # Enable debug output
++ chmod +x ./deploy.sh
++ chmod +x ./docker-run.sh
+++ pwd
++ export GITHUB_WORKSPACE=/home/runner/work/bespangle/bespangle
++ GITHUB_WORKSPACE=/home/runner/work/bespangle/bespangle
++ NETWORK=automate-deployment
++ mkdir -p build
++ chmod -R 777 build
++ echo '🚀 Starting deployment to automate-deployment network...'
+🚀 Starting deployment to automate-deployment network...
+++ pwd
++ echo 'Working directory: /home/runner/work/bespangle/bespangle'
+Working directory: /home/runner/work/bespangle/bespangle
++ set -x
+++ id -u
+++ id -g
+++ id -u
+++ id -g
++ docker run --rm -e BESPANGLE_IN_DOCKER=true -e GITHUB_WORKSPACE=/github/workspace -e NETWORK=automate-deployment -e DEPLOYER_PRIVATE_KEY=*** -e USER_ID=1001 -e GROUP_ID=118 -v /home/runner/work/bespangle/bespangle:/github/workspace -v /home/runner/work/bespangle/bespangle/build:/github/workspace/build -w /github/workspace --user root bespangle-dev-env bash -c '
+    set -ex &&
+    echo '\''=== Setting permissions...'\'' &&
+    chown -R 1001:118 /github/workspace/build &&
+    chmod -R 777 /github/workspace/build &&
+    echo '\''=== Starting deployment script...'\'' &&
+    ./deploy.sh --network "automate-deployment" --action both
+  '
++ echo '=== Setting permissions...'
+=== Setting permissions...
++ chown -R 1001:118 /github/workspace/build
++ chmod -R 777 /github/workspace/build
++ echo '=== Starting deployment script...'
+=== Starting deployment script...
++ ./deploy.sh --network automate-deployment --action both
++ main --network automate-deployment --action both
++ setup_wallet
+Setting up wallet...
++ echo 'Setting up wallet...'
++ mkdir -p /home/developer/eosio-wallet
++ chmod 700 /home/developer/eosio-wallet
++ mkdir -p /home/developer/eosio-wallet/logs
++ chmod 700 /home/developer/eosio-wallet/logs
++ echo 'Starting keosd...'
+Starting keosd...
++ KESOD_PID=14
++ echo 'Waiting for keosd to start...'
++ sleep 5
++ keosd --http-server-address=127.0.0.1:8900
+Waiting for keosd to start...
++ ps -p 14
+Creating new wallet...
++ echo 'Creating new wallet...'
+++ cleos wallet create --to-console
++ WALLET_CREATE_OUTPUT='Creating wallet: default
+Save password to use in the future to unlock this wallet.
+Without password imported keys will not be retrievable.
+"PW5HsbTSgAQVGMCu23gbQBgUse2nf3NLLGrCU2bnRerNjF2YrnYq6"'
+++ echo 'Creating wallet: default
+Save password to use in the future to unlock this wallet.
+Without password imported keys will not be retrievable.
+"PW5HsbTSgAQVGMCu23gbQBgUse2nf3NLLGrCU2bnRerNjF2YrnYq6"'
+++ grep -o 'PW5[^\"]*'
+++ head -1
++ WALLET_PASSWORD=PW5HsbTSgAQVGMCu23gbQBgUse2nf3NLLGrCU2bnRerNjF2YrnYq6
++ '[' -z PW5HsbTSgAQVGMCu23gbQBgUse2nf3NLLGrCU2bnRerNjF2YrnYq6 ']'
++ echo PW5HsbTSgAQVGMCu23gbQBgUse2nf3NLLGrCU2bnRerNjF2YrnYq6
++ chmod 600 /home/developer/wallet_password.txt
++ '[' -n *** ']'
++ echo 'Importing private key...'
+Importing private key...
++ echo ***
++ cleos wallet import --private-key
+private key: imported private key for: EOS89qzdXvKSDU1d5iDt3zBpqEfBb5HUxZM79SUPHZUbSQbGHTH2Z
++ [[ 4 -gt 0 ]]
++ case $1 in
++ NETWORK=automate-deployment
++ shift 2
++ [[ 2 -gt 0 ]]
++ case $1 in
+++ echo both
+++ tr '[:upper:]' '[:lower:]'
++ ACTION=both
++ shift 2
++ [[ 0 -gt 0 ]]
++ '[' -z automate-deployment ']'
++ [[ ! both =~ ^(build|deploy|both)$ ]]
++ required_commands=('jq' 'cleos')
++ local required_commands
++ for cmd in "${required_commands[@]}"
++ command -v jq
++ for cmd in "${required_commands[@]}"
++ command -v cleos
++ echo -e '\n=== Starting Deployment ==='
+=== Starting Deployment ===
++ echo 'Network: automate-deployment'
+Network: automate-deployment
+Action: both
+Loading network configuration...
++ echo 'Action: both'
++ echo -e '\nLoading network configuration...'
++ load_network_config automate-deployment
++ local network=automate-deployment
++ command -v jq
++ '[' '!' -f network_config.json ']'
++ local config_data
+++ jq -r --arg net automate-deployment '.networks[$net] // empty' network_config.json
++ config_data='{
+  "endpoint": "http://jungle4.cryptolions.io",
+  "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+  "system_symbol": "EOS",
+  "system_contract": "eosio",
+  "accounts": {
+    "aemanager": "aemanagerdlt",
+    "andemitter": "andemitterdl",
+    "authority": "authoritydlt",
+    "badgedata": "badgedatadlt",
+    "bamanager": "bamanagerdlt",
+    "boundedagg": "boundedagdlt",
+    "boundedstats": "boundedstdlt",
+    "bounties": "bountiesdlta",
+    "cumulative": "cumulativdlt",
+    "org": "organizatdlt",
+    "requests": "requestsdlta",
+    "simmanager": "simmanagedlt",
+    "simplebadge": "simplebaddlt",
+    "statistics": "statisticdlt",
+    "subscription": "subscribedlt"
+  }
+}'
++ '[' -z '{
+  "endpoint": "http://jungle4.cryptolions.io",
+  "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+  "system_symbol": "EOS",
+  "system_contract": "eosio",
+  "accounts": {
+    "aemanager": "aemanagerdlt",
+    "andemitter": "andemitterdl",
+    "authority": "authoritydlt",
+    "badgedata": "badgedatadlt",
+    "bamanager": "bamanagerdlt",
+    "boundedagg": "boundedagdlt",
+    "boundedstats": "boundedstdlt",
+    "bounties": "bountiesdlta",
+    "cumulative": "cumulativdlt",
+    "org": "organizatdlt",
+    "requests": "requestsdlta",
+    "simmanager": "simmanagedlt",
+    "simplebadge": "simplebaddlt",
+    "statistics": "statisticdlt",
+    "subscription": "subscribedlt"
+  }
+}' ']'
+++ echo '{
+  "endpoint": "http://jungle4.cryptolions.io",
+  "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+  "system_symbol": "EOS",
+  "system_contract": "eosio",
+  "accounts": {
+    "aemanager": "aemanagerdlt",
+    "andemitter": "andemitterdl",
+    "authority": "authoritydlt",
+    "badgedata": "badgedatadlt",
+    "bamanager": "bamanagerdlt",
+    "boundedagg": "boundedagdlt",
+    "boundedstats": "boundedstdlt",
+    "bounties": "bountiesdlta",
+    "cumulative": "cumulativdlt",
+    "org": "organizatdlt",
+    "requests": "requestsdlta",
+    "simmanager": "simmanagedlt",
+    "simplebadge": "simplebaddlt",
+    "statistics": "statisticdlt",
+    "subscription": "subscribedlt"
+  }
+}'
+++ jq -r .endpoint
++ export NETWORK_ENDPOINT=http://jungle4.cryptolions.io
++ NETWORK_ENDPOINT=http://jungle4.cryptolions.io
+++ echo '{
+  "endpoint": "http://jungle4.cryptolions.io",
+  "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+  "system_symbol": "EOS",
+  "system_contract": "eosio",
+  "accounts": {
+    "aemanager": "aemanagerdlt",
+    "andemitter": "andemitterdl",
+    "authority": "authoritydlt",
+    "badgedata": "badgedatadlt",
+    "bamanager": "bamanagerdlt",
+    "boundedagg": "boundedagdlt",
+    "boundedstats": "boundedstdlt",
+    "bounties": "bountiesdlta",
+    "cumulative": "cumulativdlt",
+    "org": "organizatdlt",
+    "requests": "requestsdlta",
+    "simmanager": "simmanagedlt",
+    "simplebadge": "simplebaddlt",
+    "statistics": "statisticdlt",
+    "subscription": "subscribedlt"
+  }
+}'
+++ jq -r .chain_id
++ export CHAIN_ID=73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d
++ CHAIN_ID=73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d
+++ echo '{
+  "endpoint": "http://jungle4.cryptolions.io",
+  "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+  "system_symbol": "EOS",
+  "system_contract": "eosio",
+  "accounts": {
+    "aemanager": "aemanagerdlt",
+    "andemitter": "andemitterdl",
+    "authority": "authoritydlt",
+    "badgedata": "badgedatadlt",
+    "bamanager": "bamanagerdlt",
+    "boundedagg": "boundedagdlt",
+    "boundedstats": "boundedstdlt",
+    "bounties": "bountiesdlta",
+    "cumulative": "cumulativdlt",
+    "org": "organizatdlt",
+    "requests": "requestsdlta",
+    "simmanager": "simmanagedlt",
+    "simplebadge": "simplebaddlt",
+    "statistics": "statisticdlt",
+    "subscription": "subscribedlt"
+  }
+}'
+++ jq -r .system_symbol
++ export SYSTEM_SYMBOL=EOS
++ SYSTEM_SYMBOL=EOS
+++ echo '{
+  "endpoint": "http://jungle4.cryptolions.io",
+  "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+  "system_symbol": "EOS",
+  "system_contract": "eosio",
+  "accounts": {
+    "aemanager": "aemanagerdlt",
+    "andemitter": "andemitterdl",
+    "authority": "authoritydlt",
+    "badgedata": "badgedatadlt",
+    "bamanager": "bamanagerdlt",
+    "boundedagg": "boundedagdlt",
+    "boundedstats": "boundedstdlt",
+    "bounties": "bountiesdlta",
+    "cumulative": "cumulativdlt",
+    "org": "organizatdlt",
+    "requests": "requestsdlta",
+    "simmanager": "simmanagedlt",
+    "simplebadge": "simplebaddlt",
+    "statistics": "statisticdlt",
+    "subscription": "subscribedlt"
+  }
+}'
+++ jq -r .system_contract
++ export SYSTEM_CONTRACT=eosio
++ SYSTEM_CONTRACT=eosio
+++ jq -r '.skip_contracts // [] | join(" ")' network_config.json
++ local 'skip_contracts_json=tokenstaker govweight bountmanager'
++ '[' -n 'tokenstaker govweight bountmanager' ']'
++ IFS=' '
++ read -r -a SKIP_CONTRACTS
++ export SKIP_CONTRACTS
+++ echo '{
+  "endpoint": "http://jungle4.cryptolions.io",
+  "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+  "system_symbol": "EOS",
+  "system_contract": "eosio",
+  "accounts": {
+    "aemanager": "aemanagerdlt",
+    "andemitter": "andemitterdl",
+    "authority": "authoritydlt",
+    "badgedata": "badgedatadlt",
+    "bamanager": "bamanagerdlt",
+    "boundedagg": "boundedagdlt",
+    "boundedstats": "boundedstdlt",
+    "bounties": "bountiesdlta",
+    "cumulative": "cumulativdlt",
+    "org": "organizatdlt",
+    "requests": "requestsdlta",
+    "simmanager": "simmanagedlt",
+    "simplebadge": "simplebaddlt",
+    "statistics": "statisticdlt",
+    "subscription": "subscribedlt"
+  }
+}'
+++ jq -r '.accounts | to_entries[] | "export \(.key | ascii_upcase)=\"\(.value)\""'
++ local 'accounts=export AEMANAGER="aemanagerdlt"
+export ANDEMITTER="andemitterdl"
+export AUTHORITY="authoritydlt"
+export BADGEDATA="badgedatadlt"
+export BAMANAGER="bamanagerdlt"
+export BOUNDEDAGG="boundedagdlt"
+export BOUNDEDSTATS="boundedstdlt"
+export BOUNTIES="bountiesdlta"
+export CUMULATIVE="cumulativdlt"
+export ORG="organizatdlt"
+export REQUESTS="requestsdlta"
+export SIMMANAGER="simmanagedlt"
+export SIMPLEBADGE="simplebaddlt"
+export STATISTICS="statisticdlt"
+export SUBSCRIPTION="subscribedlt"'
++ '[' -n 'export AEMANAGER="aemanagerdlt"
+export ANDEMITTER="andemitterdl"
+export AUTHORITY="authoritydlt"
+export BADGEDATA="badgedatadlt"
+export BAMANAGER="bamanagerdlt"
+export BOUNDEDAGG="boundedagdlt"
+export BOUNDEDSTATS="boundedstdlt"
+export BOUNTIES="bountiesdlta"
+export CUMULATIVE="cumulativdlt"
+export ORG="organizatdlt"
+export REQUESTS="requestsdlta"
+export SIMMANAGER="simmanagedlt"
+export SIMPLEBADGE="simplebaddlt"
+export STATISTICS="statisticdlt"
+export SUBSCRIPTION="subscribedlt"' ']'
++ eval 'export AEMANAGER="aemanagerdlt"
+export ANDEMITTER="andemitterdl"
+export AUTHORITY="authoritydlt"
+export BADGEDATA="badgedatadlt"
+export BAMANAGER="bamanagerdlt"
+export BOUNDEDAGG="boundedagdlt"
+export BOUNDEDSTATS="boundedstdlt"
+export BOUNTIES="bountiesdlta"
+export CUMULATIVE="cumulativdlt"
+export ORG="organizatdlt"
+export REQUESTS="requestsdlta"
+export SIMMANAGER="simmanagedlt"
+export SIMPLEBADGE="simplebaddlt"
+export STATISTICS="statisticdlt"
+export SUBSCRIPTION="subscribedlt"'
+++ export AEMANAGER=aemanagerdlt
+++ AEMANAGER=aemanagerdlt
+++ export ANDEMITTER=andemitterdl
+++ ANDEMITTER=andemitterdl
+++ export AUTHORITY=authoritydlt
+++ AUTHORITY=authoritydlt
+++ export BADGEDATA=badgedatadlt
+++ BADGEDATA=badgedatadlt
+++ export BAMANAGER=bamanagerdlt
+++ BAMANAGER=bamanagerdlt
+++ export BOUNDEDAGG=boundedagdlt
+++ BOUNDEDAGG=boundedagdlt
+++ export BOUNDEDSTATS=boundedstdlt
+++ BOUNDEDSTATS=boundedstdlt
+++ export BOUNTIES=bountiesdlta
+++ BOUNTIES=bountiesdlta
+++ export CUMULATIVE=cumulativdlt
+++ CUMULATIVE=cumulativdlt
+++ export ORG=organizatdlt
+++ ORG=organizatdlt
+++ export REQUESTS=requestsdlta
+++ REQUESTS=requestsdlta
+++ export SIMMANAGER=simmanagedlt
+++ SIMMANAGER=simmanagedlt
+++ export SIMPLEBADGE=simplebaddlt
+++ SIMPLEBADGE=simplebaddlt
+++ export STATISTICS=statisticdlt
+++ STATISTICS=statisticdlt
+++ export SUBSCRIPTION=subscribedlt
+++ SUBSCRIPTION=subscribedlt
++ '[' 0 -eq 1 ']'
++ local current_branch
+++ git rev-parse --abbrev-ref HEAD
+++ echo unknown
++ current_branch=unknown
++ echo -e '\nDeployment Details:'
++ echo '- Branch: unknown'
++ echo '- Network: automate-deployment'
++ echo '- Endpoint: http://jungle4.cryptolions.io'
++ echo '- Chain ID: 73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d'
++ contracts_to_process=()
++ local contracts_to_process
++ '[' all = all ']'
++ echo -e '\nDiscovering contracts for network: automate-deployment'
++ contracts_to_process=($(jq -r --arg net "$NETWORK" '.networks[$net].accounts | keys[]' "$NETWORK_CONFIG" 2>/dev/null))
+Deployment Details:
+- Branch: unknown
+- Network: automate-deployment
+- Endpoint: http://jungle4.cryptolions.io
+- Chain ID: 73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d
+Discovering contracts for network: automate-deployment
+++ jq -r --arg net automate-deployment '.networks[$net].accounts | keys[]' network_config.json
++ '[' 15 -eq 0 ']'
++ '[' 0 -eq 1 ']'
++ '[' '!' -d build ']'
+++ id -u
+++ id -g
++ chown -R 0:0 build
++ local success_count=0
++ local fail_count=0
++ local skipped_count=0
++ main_status=0
++ cleanup_keosd 0
++ local exit_code=0
++ echo -e '\nCleaning up keosd process...'
++ pkill -f keosd
+Cleaning up keosd process...
++ return 0
++ cleanup_status=0
+✅ All deployments completed successfully
++ '[' 0 -eq 0 ']'
++ '[' 0 -ne 0 ']'
++ final_status=0
++ '[' 0 -eq 0 ']'
++ echo '✅ All deployments completed successfully'
++ exit 0
++ DEPLOYMENT_EXIT_CODE=0
+=== Deployment script exited with code: 0 ===
++ echo '=== Deployment script exited with code: 0 ==='
++ '[' 0 -ne 0 ']'
++ echo '✅ Successfully deployed to automate-deployment network'
+✅ Successfully deployed to automate-deployment network
 
 # Path to build script
 BUILD_SCRIPT="./build.sh"
@@ -537,6 +949,149 @@ main() {
     local success_count=0
     local fail_count=0
     local skipped_count=0
+        local start_time=$(date +%s)
+        
+        echo -e "\n=== Starting $ACTION process ==="
+        
+        # First, build all contracts if needed
+        if [ "$ACTION" = "both" ] || [ "$ACTION" = "build" ]; then
+            echo -e "\n🔨 Building all contracts via './build.sh -t \"$CONTRACTS\"'..."
+            ./build.sh -t "$CONTRACTS"
+            local build_status=$?
+            if [ $build_status -ne 0 ]; then
+                echo "⚠️ Build script './build.sh -t \"$CONTRACTS\"' exited with status $build_status. Continuing with deployment attempts..." >&2
+                # Do not set overall_status=1 here, allow deployment attempts for contracts that might have built before the failure.
+            else
+                echo "✅ Build script './build.sh -t \"$CONTRACTS\"' completed successfully."
+            fi
+        fi
+        
+        # If action was just 'build', we're done
+        if [ "$ACTION" = "build" ]; then
+            echo "Build completed. Use 'deploy' action to deploy the contracts."
+            return 0
+        fi
+
+    # Process each contract for deployment
+    local deployment_output=""
+    for contract in "${contracts_to_process[@]}"; do
+        contract=$(echo "$contract" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+        
+        # Skip if in skip list
+        if should_skip_contract "$contract"; then
+            echo "Skipping $contract (in skip list)"
+            ((skipped_count++))
+            continue
+        fi
+        
+        case "$ACTION" in
+            deploy)
+                echo -e "\n🚀 Deploying contract: $contract"
+                output=$(deploy_contract "$contract" 2>&1)
+                status=$?
+                if [ $status -eq 0 ]; then
+                    if echo "$output" | grep -q -E -i "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
+                        echo "✅ Contract already up to date: $contract"
+                        deployment_output+="✅ Contract already up to date: $contract\n"
+                        ((skipped_count++))
+                    else
+                        echo "✅ Successfully deployed: $contract"
+                        deployment_output+="✅ Successfully deployed: $contract\n"
+                        ((success_count++))
+                    fi
+                else
+                    echo "❌ Deployment failed for $contract" >&2
+                    echo "Error details:" >&2
+                    echo "$output" >&2
+                    deployment_output+="❌ Deployment failed for $contract\n"
+                    ((fail_count++))
+                fi
+                ;;
+                
+            both)
+                # Now deploy the current contract
+                echo -e "\n🚀 Deploying contract: $contract"
+                output=$(deploy_contract "$contract" 2>&1)
+                status=$?
+                if [ $status -eq 0 ]; then
+                    if echo "$output" | grep -q -E -i "Skipping set (code|abi) because the new (code|abi) is the same as the existing"; then
+                        echo "✅ Contract already up to date: $contract"
+                        deployment_output+="✅ Contract already up to date: $contract\n"
+                        ((skipped_count++))
+                    else
+                        echo "✅ Successfully deployed: $contract"
+                        deployment_output+="✅ Successfully deployed: $contract\n"
+                        ((success_count++))
+                    fi
+                else
+                    echo "❌ Deployment failed for $contract after retries" >&2
+                    echo "Error details:" >&2
+                    echo "$output" >&2
+                    deployment_output+="❌ Deployment failed for $contract\n"
+                    ((fail_count++))
+                fi
+                ;;
+        esac
+    done
+    
+    # Calculate duration
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+    
+    # Print summary with color coding
+    echo -e "\n=== Deployment Summary ==="
+    echo "Network:        $NETWORK"
+    echo "Action:         $ACTION"
+    echo "Duration:       ${duration}s"
+    echo "Total:          $((success_count + fail_count + skipped_count))"
+    
+    # Success count in green
+    echo -n "✅ Success:    $success_count"
+    
+    # Skipped count in yellow if any
+    if [ $skipped_count -gt 0 ]; then
+        echo -n "   ⏩ Skipped: $skipped_count"
+    fi
+    
+    # Failed count in red if any
+    if [ $fail_count -gt 0 ]; then
+        echo -n "   ❌ Failed: $fail_count"
+    fi
+    
+    echo -e "\n=========================="
+    
+    # Print detailed failure information if any
+    if [ $fail_count -gt 0 ]; then
+        echo -e "\n🔍 Failed Contract Details:"
+        echo "----------------------------------------"
+        for contract in "${contracts_to_process[@]}"; do
+            # Just list the contracts that failed during the main deployment
+            # We already know which ones failed from the main loop
+            if ! grep -q "✅ Successfully deployed: $contract" <<< "$deployment_output" && 
+               ! grep -q "✅ Contract already up to date: $contract" <<< "$deployment_output"; then
+                echo "❌ $contract - Failed to deploy"
+            fi
+        done
+        echo "----------------------------------------"
+    fi
+    
+    # Print final status
+    echo -e "\n=== Final Status ==="
+    echo "✅ Success: $success_count"
+    if [ $skipped_count -gt 0 ]; then
+        echo "⏩ Skipped: $skipped_count"
+    fi
+    if [ $fail_count -gt 0 ]; then
+        echo "❌ Failed: $fail_count (see details above)" >&2
+        echo -e "\n💡 Some contracts failed to deploy. Check the error messages above for details."
+        return 1
+    elif [ $success_count -eq 0 ] && [ $skipped_count -eq 0 ]; then
+        echo "ℹ️  No contracts were processed. Please check your configuration."
+        return 1
+    else
+        echo -e "\n✅ All contracts processed successfully!"
+        return 0
+    fi
 
     }
 
