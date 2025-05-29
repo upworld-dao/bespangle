@@ -536,31 +536,38 @@ main() {
     
     echo -e "\n=== Starting $ACTION process ==="
     
+    # First, build all contracts if needed
+    if [ "$ACTION" = "both" ] || [ "$ACTION" = "build" ]; then
+        echo -e "\n🔨 Building all contracts..."
+        if $BUILD_SCRIPT -t all 2>&1; then
+            echo "✅ All contracts built successfully"
+            BUILD_DONE=1
+        else
+            echo "⚠️  Build had some issues, but continuing with deployment..."
+            BUILD_DONE=1
+        fi
+        
+        # If action was just 'build', we're done
+        if [ "$ACTION" = "build" ]; then
+            echo "Build completed. Use 'deploy' action to deploy the contracts."
+            return 0
+        fi
+    fi
+    
+    # Process each contract for deployment
     for contract in "${contracts_to_process[@]}"; do
         contract=$(echo "$contract" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
         
-        # Check if contract should be skipped
+        # Skip if in skip list
         if should_skip_contract "$contract"; then
-            echo -e "\n Skipping contract: $contract (in SKIP_CONTRACTS)"
+            echo "Skipping $contract (in skip list)"
             ((skipped_count++))
             continue
         fi
         
-        # Process based on action
         case "$ACTION" in
-            build)
-                echo -e "\n Building $contract..."
-                if $BUILD_SCRIPT -t "$contract"; then
-                    echo " Successfully built $contract"
-                    ((success_count++))
-                else
-                    echo " Failed to build $contract" >&2
-                    ((fail_count++))
-                    # Continue to next contract instead of exiting
-                fi
-                ;;
-                
             deploy)
+                echo -e "\n🚀 Deploying contract: $contract"
                 if deploy_contract "$contract"; then
                     echo "✅ Deployment successful for $contract"
                     ((success_count++))
@@ -571,18 +578,6 @@ main() {
                 ;;
                 
             both)
-                # First, build all contracts in a single operation
-                if [ -z "$BUILD_DONE" ]; then
-                    echo -e "\n🔨 Building all contracts..."
-                    if $BUILD_SCRIPT -t all 2>&1; then
-                        echo "✅ All contracts built successfully"
-                        BUILD_DONE=1
-                    else
-                        echo "⚠️  Build had some issues, but continuing with deployment..."
-                        BUILD_DONE=1
-                    fi
-                fi
-                
                 # Now deploy the current contract
                 echo -e "\n🚀 Deploying contract: $contract"
                 if deploy_contract "$contract"; then
