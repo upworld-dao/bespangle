@@ -206,7 +206,7 @@ deploy_contract() {
         eos_amount_calc_output=$(awk -v bytes="$bytes" 'BEGIN { printf "%.4f", (bytes / 10000) + 0.1 }' 2>&1)
         if [ $? -ne 0 ]; then
             echo "ERROR: awk failed calculating initial EOS amount for RAM for $contract. Input bytes: $bytes. Error: $eos_amount_calc_output" >&2
-            return 1
+            exit 1
         fi
         local eos_amount="$eos_amount_calc_output"
 
@@ -214,7 +214,7 @@ deploy_contract() {
         final_eos_amount_output=$(awk -v amt="$eos_amount" 'BEGIN { printf "%.4f", amt < 1.0 ? 1.0 : amt }' 2>&1)
         if [ $? -ne 0 ]; then
             echo "ERROR: awk failed adjusting final EOS amount for RAM for $contract. Input amount: $eos_amount. Error: $final_eos_amount_output" >&2
-            return 1
+            exit 1
         fi
         eos_amount="$final_eos_amount_output"
         
@@ -232,11 +232,11 @@ deploy_contract() {
         if [ $status -ne 0 ]; then
             echo "❌ Failed to buy RAM. Error:"
             echo "$output"
-            return 1
+            exit 1
         else
             echo "✅ Successfully bought RAM. Transaction details:"
             echo "$output"
-            return 0
+            exit 0
         fi
     }
     
@@ -288,7 +288,7 @@ deploy_contract() {
             # Try to buy more RAM
             if ! buy_ram "$account" "$account" "$needed_ram"; then
                 echo "❌ Failed to buy RAM. Please manually add RAM to the account and try again."
-                return 1
+                exit 1
             fi
             
             # If we get here, RAM was successfully purchased, so we can retry the deployment
@@ -303,9 +303,9 @@ deploy_contract() {
             else
                 echo "ℹ️  Contract is already up to date"
                 # This is not an error, so we should still return success
-                return 0
+                exit 0
             fi
-            return 0
+            exit 0
         fi
 
         # If we get here, there was an error
@@ -323,23 +323,23 @@ deploy_contract() {
             echo "   Try: cleos -u $NETWORK_ENDPOINT system buyram $account $account \"RAM_AMOUNT\""
         elif echo "$output" | grep -qi "transaction[[:space:]]*net[[:space:]]*usage[[:space:]]*is[[:space:]]*too[[:space:]]*high"; then
             echo "💡 Transaction too large. Try deploying with fewer contracts at once."
-            return 1
+            exit 1
         elif echo "$output" | grep -qi "missing[[:space:]]*authority"; then
             echo "💡 Missing authority. Ensure the account has the correct permissions."
             echo "   Required permission: $account@active"
-            return 1
+            exit 1
         elif echo "$output" | grep -qi "unknown[[:space:]]*key"; then
             echo "💡 Unknown key error. Check if the account exists and the private key is correct."
-            return 1
+            exit 1
         elif echo "$output" | grep -qi "does not exist"; then
             echo "💡 Account does not exist. Please create the account first."
-            return 1
+            exit 1
         fi
         
         # If we've reached max attempts, give up
         if [ $attempt -ge $MAX_ATTEMPTS ]; then
             echo "❌ Max retry attempts reached for $account. Giving up."
-            return 1
+            exit 1
         fi
         
         # Otherwise, wait and retry
@@ -552,7 +552,7 @@ main() {
         # If action was just 'build', we're done
         if [ "$ACTION" = "build" ]; then
             echo "Build completed. Use 'deploy' action to deploy the contracts."
-            return 0
+            exit 0
         fi
 
     # Process each contract for deployment
