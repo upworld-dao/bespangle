@@ -1,5 +1,5 @@
-# Use Ubuntu 22.04 as base for builder stage
-FROM ubuntu:22.04 as builder
+# Use Ubuntu 22.04 as base
+FROM ubuntu:22.04
 
 # Set environment variables
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -48,26 +48,6 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     && apt-get install -y ./cdt_${CDT_VERSION}-1_amd64.deb \
     && rm -rf /tmp/cdt
 
-# Create final image
-FROM ubuntu:22.04
-
-# Copy only necessary files from builder
-COPY --from=builder /usr/local /usr/local
-COPY --from=builder /opt/eosio /opt/eosio
-COPY --from=builder /opt/antelope /opt/antelope
-COPY --from=builder /usr/lib/node_modules /usr/lib/node_modules
-COPY --from=builder /usr/bin/node /usr/bin/node
-COPY --from=builder /usr/bin/npm /usr/bin/npm
-COPY --from=builder /usr/bin/npx /usr/bin/npx
-
-# Set up environment
-ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/eosio/bin/:/opt/antelope/bin"
-ENV NODE_PATH="/usr/lib/node_modules"
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Set up working directory
-WORKDIR /app
-
 # Install runtime dependencies
 RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,target=/var/lib/apt,sharing=locked \
@@ -76,40 +56,11 @@ RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files first to leverage Docker cache
-COPY package*.json ./
-
-# Install npm dependencies with cache
-RUN --mount=type=cache,target=/root/.npm \
-    npm ci --prefer-offline
-
-# Copy the rest of the application
-COPY . .
-
-# Make scripts executable
-RUN chmod +x *.sh
-
-# Set environment variables
-ENV PATH="/usr/opt/leap/5.0.3/bin:/usr/opt/cdt/${CDT_VERSION}/bin:${PATH}"
-
-# Verify installations
-RUN echo "Leap version: $(cleos version client)" \
-    && echo "CDT version: $(cdt-cpp --version)"
-
-# Install base utilities
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Add other base utilities here if needed
-    && rm -rf /var/lib/apt/lists/*
-
-# eosio.bios download/build steps removed
-
-# Add CDT binaries to the system PATH
-ENV PATH="/usr/opt/cdt/${CDT_VERSION}/bin:${PATH}"
-
-# Verify installations
-RUN echo "Node.js version: $(node --version)"
-RUN echo "npm version: $(npm --version)"
-RUN echo "CDT version: $(cdt-cpp --version)" && cdt-cpp --version | grep "${CDT_VERSION}"
+# Set up environment
+ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/opt/leap/${LEAP_VERSION}/bin:/usr/opt/cdt/${CDT_VERSION}/bin"
+ENV NODE_PATH="/usr/lib/node_modules"
+ENV LEAP_PATH="/usr/opt/leap/${LEAP_VERSION}"
+ENV CDT_PATH="/usr/opt/cdt/${CDT_VERSION}"
 
 # Create a non-root user with the same UID/GID as the host user
 ARG USER_ID=1000
@@ -125,10 +76,39 @@ RUN groupadd -g ${GROUP_ID} developer 2>/dev/null || true \
     && chmod 755 /workspace \
     && chmod 775 /workspace/build
 
-# Set up a working directory inside the container
+# Set up working directories
 WORKDIR /workspace
 
-# Switch to the non-root user
+# Copy package files first to leverage Docker cache
+COPY --chown=${USER_ID}:${GROUP_ID} package*.json ./
+
+# Install npm dependencies with cache
+RUN --mount=type=cache,target=/home/developer/.npm \
+    npm ci --prefer-offline
+
+# Copy the rest of the application
+COPY --chown=${USER_ID}:${GROUP_ID} . .
+
+# Make scripts executable
+RUN chmod +x *.sh
+
+# Verify installations
+RUN echo "Node.js version: $(node --version)" \
+    && echo "npm version: $(npm --version)" \
+    && echo "Leap version: $(cleos version client)" \
+    && echo "CDT version: $(cdt-cpp --version)" \
+    && cdt-cpp --version | grep "${CDT_VERSION}" || true
+
+# Install Node.js dependencies for the tests
+USER root
+RUN cd tests && npm install --unsafe-perm
+
+# Change ownership of node_modules and package files to the non-root user
+RUN chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/node_modules \
+    /workspace/tests/package*.json \
+    /workspace/tests/package-lock.json
+
+# Switch to non-root user for safety
 USER ${USER_ID}:${GROUP_ID}
 
 # Set environment variables for the user
@@ -138,22 +118,3 @@ ENV GIT_CONFIG_NOSYSTEM=1
 # Create a local git config that won't require root permissions
 RUN mkdir -p /home/developer/.config/git \
     && git config --file /home/developer/.gitconfig safe.directory /workspace
-
-# Copy the entire project context into the image
-COPY . /workspace/
-
-# Install Node.js dependencies for the tests
-# First install as root to avoid permission issues
-USER root
-RUN cd tests && npm install --unsafe-perm
-
-# Change ownership of node_modules and package files to the non-root user
-RUN chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/node_modules \
-    && chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/package*.json \
-    && chown -R ${USER_ID}:${GROUP_ID} /workspace/tests/package-lock.json
-
-# Switch back to non-root user for safety
-USER ${USER_ID}:${GROUP_ID}
-
-# Indicate that the container is ready (optional, can be removed)
-# CMD ["echo", "Antelope CDT & Node.js environment ready."]
