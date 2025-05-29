@@ -259,18 +259,22 @@ deploy_contract() {
             set contract "$account" "$wasm_dir" "$wasm_file" "$abi_file" \
             -p "$account@active" 2>&1)
         status=$?
-        echo "[DEBUG] cleos set contract exit status: $status"
         if [ $status -ne 0 ]; then
-            echo "[DEBUG] cleos set contract output:\n$output"
         fi
         
         # Print cleos output and fail if there was an error
         if [ $status -ne 0 ]; then
+            # Propagate RAM errors and fail
+            if echo "$output" | grep -Eqi "insufficient[[:space:]]*ram|ram_usage_exceeded|not enough ram|needs [0-9,]+ bytes|account does not have enough RAM|cannot create table"; then
+                echo "❌ RAM error detected during contract deployment for $contract (account: $account)"
+                echo "$output"
+                return 1
+            fi
             echo "❌ cleos set contract failed for $contract (account: $account)"
             echo "$output"
             return 1
         fi
-        
+
         # Check if deployment was successful or if the code/ABI is the same
         if [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set \(code\|abi\) because the new \(code\|abi\) is the same as the existing"; then
             if [ $status -eq 0 ]; then
