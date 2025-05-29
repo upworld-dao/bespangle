@@ -571,21 +571,27 @@ main() {
                 ;;
                 
             both)
-                echo -e "\n🔨 Building and Deploying $contract"
-                # Run build script but don't fail the entire process if it returns non-zero
-                if $BUILD_SCRIPT -t "$contract" || true; then
-                    echo "✅ Build successful or skipped, attempting to deploy..."
-                    if deploy_contract "$contract"; then
-                        echo "✅ Successfully built and deployed $contract"
-                        ((success_count++))
+                echo -e "\n🔨 Processing contract: $contract"
+                
+                # Build the contract in a subshell to prevent exit on error
+                echo "Building $contract..."
+                (
+                    # Run build script in a subshell to prevent it from exiting the main script
+                    if $BUILD_SCRIPT -t "$contract" 2>&1; then
+                        echo "✅ Build successful"
                     else
-                        echo "❌ Deployment failed for $contract after retries" >&2
-                        ((fail_count++))
+                        echo "⚠️  Build had issues, but continuing to deployment..."
+                        # The subshell will exit with the build script's status, but we don't care
                     fi
+                ) || true  # Always continue even if the subshell fails
+                
+                # Always attempt to deploy
+                echo "Deploying $contract..."
+                if deploy_contract "$contract"; then
+                    echo "✅ Successfully deployed $contract"
+                    ((success_count++))
                 else
-                    # This should never be reached because of the '|| true' above
-                    # but keeping it for logical completeness
-                    echo "❌ Build failed for $contract, skipping deployment" >&2
+                    echo "❌ Deployment failed for $contract after retries" >&2
                     ((fail_count++))
                 fi
                 ;;
