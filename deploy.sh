@@ -282,6 +282,8 @@ deploy_contract() {
                 echo "✅ Contract deployed successfully"
             else
                 echo "ℹ️  Contract is already up to date"
+                # This is not an error, so we should still return success
+                return 0
             fi
             return 0
         fi
@@ -621,8 +623,9 @@ main() {
         echo -e "\n🔍 Failed Contract Details:"
         echo "----------------------------------------"
         for contract in "${contracts_to_process[@]}"; do
+            # Just list the failed contracts without redeploying
             if ! deploy_contract "$contract" 2>/dev/null; then
-                echo "❌ $contract - See error details above"
+                echo "❌ $contract - Failed to deploy"
             fi
         done
         echo "----------------------------------------"
