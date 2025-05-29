@@ -249,7 +249,7 @@ deploy_contract() {
     
     while [ $attempt -le $max_retries ]; do
         echo "🚀 Deployment attempt $attempt of $max_retries..."
-        
+
         if [ "$VERBOSE" -eq 1 ]; then
             echo "Running: cleos -u $NETWORK_ENDPOINT set contract $account $wasm_dir $wasm_file $abi_file -p $account@active"
         fi
@@ -284,18 +284,20 @@ deploy_contract() {
                 fi
                 echo "📊 Buying RAM with 25% buffer (or original if buffer calc failed): $needed_ram bytes"
             fi
-            
+
+            echo "[DEBUG] Attempting to buy RAM for $account: $needed_ram bytes"
             # Try to buy more RAM
             if ! buy_ram "$account" "$account" "$needed_ram"; then
                 echo "❌ Failed to buy RAM. Please manually add RAM to the account and try again."
                 return 1
             fi
-            
+
             # If we get here, RAM was successfully purchased, so we can retry the deployment
             attempt=$((attempt + 1))
+            echo "[DEBUG] RAM purchased. Incremented attempt to $attempt for $contract"
             continue
         fi
-        
+
         # Check if deployment was successful or if the code/ABI is the same
         if [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set \(code\|abi\) because the new \(code\|abi\) is the same as the existing"; then
             if [ $status -eq 0 ]; then
@@ -316,11 +318,10 @@ deploy_contract() {
         echo "----------------------------------------"
         echo "$output"
         echo "========================================"
-        
+
         # Check for common errors and provide suggestions
         if echo "$output" | grep -qi "insufficient[[:space:]]*ram"; then
-            echo "💡 Insufficient RAM error detected. Consider buying more RAM for the account."
-            echo "   Try: cleos -u $NETWORK_ENDPOINT system buyram $account $account \"RAM_AMOUNT\""
+            echo "💡 Still insufficient RAM after attempt to buy RAM."
         elif echo "$output" | grep -qi "transaction[[:space:]]*net[[:space:]]*usage[[:space:]]*is[[:space:]]*too[[:space:]]*high"; then
             echo "💡 Transaction too large. Try deploying with fewer contracts at once."
             return 1
@@ -335,14 +336,7 @@ deploy_contract() {
             echo "💡 Account does not exist. Please create the account first."
             return 1
         fi
-        
-        # If we've reached max attempts, give up
-        if [ $attempt -ge $MAX_ATTEMPTS ]; then
-            echo "❌ Max retry attempts reached for $account. Giving up."
-            return 1
-        fi
-        
-        # Otherwise, wait and retry
+
         echo "🔄 Retrying deployment (attempt $((attempt + 1))/$MAX_ATTEMPTS)..."
         sleep 2
         attempt=$((attempt + 1))
