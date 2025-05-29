@@ -273,10 +273,13 @@ deploy_contract() {
             
             # If we get here, RAM was successfully purchased, so we can retry the deployment
             continue
-        elif [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set code because the new code is the same as the existing code"; then
-            echo "✅ Contract is already deployed with the same code"
+        if [ $status -eq 0 ] || echo "$output" | grep -qi "Skipping set code because the new code is the same as the existing code"; then
+            if [ $status -eq 0 ]; then
+                echo "✅ Contract deployed successfully"
+            else
+                echo "ℹ️  Contract is already deployed with the same code"
+            fi
             deployment_success=1
-            # Explicitly return success (0) here to ensure we don't fail
             return 0
         else
             echo "❌ Deployment failed with error:"
@@ -555,31 +558,28 @@ main() {
                 
             deploy)
                 if deploy_contract "$contract"; then
-                    echo " Deployment successful for $contract (exit code: $?)" 
+                    echo "✅ Deployment successful for $contract"
                     ((success_count++))
                 else
-                    echo " Deployment failed for $contract (exit code: $?)" >&2
+                    echo "❌ Deployment failed for $contract" >&2
                     ((fail_count++))
-                    # Continue to next contract instead of exiting
                 fi
                 ;;
                 
             both)
-                echo -e "\n Building and Deploying $contract"
+                echo -e "\n🔨 Building and Deploying $contract"
                 if $BUILD_SCRIPT -t "$contract"; then
-                    echo " Build successful, deploying..."
+                    echo "✅ Build successful, deploying..."
                     if deploy_contract "$contract"; then
-                        echo " Successfully built and deployed $contract"
+                        echo "✅ Successfully built and deployed $contract"
                         ((success_count++))
                     else
-                        echo " Deployment failed for $contract after retries" >&2
+                        echo "❌ Deployment failed for $contract after retries" >&2
                         ((fail_count++))
-                        # Continue to next contract
                     fi
                 else
-                    echo " Build failed for $contract, skipping deployment" >&2
+                    echo "❌ Build failed for $contract, skipping deployment" >&2
                     ((fail_count++))
-                    # Continue to next contract
                 fi
                 ;;
         esac
@@ -623,13 +623,20 @@ main() {
         echo "----------------------------------------"
     fi
     
-    # Always exit with success (0) if we got this far
-    # The individual contract deployment statuses are already logged
-    echo -e "\nCompleted $ACTION process for $success_count contract(s) on $NETWORK"
-    if [ $fail_count -gt 0 ]; then
-        echo "WARNING: $fail_count contract(s) had issues (see above)" >&2
+    # Print final status and exit with appropriate code
+    echo -e "\n=== Final Status ==="
+    echo "✅ Success: $success_count"
+    if [ $skipped_count -gt 0 ]; then
+        echo "⏩ Skipped: $skipped_count"
     fi
-    exit 0
+    if [ $fail_count -gt 0 ]; then
+        echo "❌ Failed: $fail_count (see details above)" >&2
+        echo -e "\n💡 Some contracts failed to deploy. Check the error messages above for details."
+        exit 1
+    else
+        echo -e "\n✅ All contracts processed successfully!"
+        exit 0
+    fi
 }
 
 # Run main function and handle exit code
