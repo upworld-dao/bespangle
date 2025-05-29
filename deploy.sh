@@ -264,9 +264,13 @@ deploy_contract() {
             echo "[DEBUG] cleos set contract output:\n$output"
         fi
         echo "[DEBUG] Checking for insufficient RAM error in cleos output..."
-        
+        echo "[DEBUG] Full cleos output before RAM check:"
+        echo "$output"
+
+        # Flatten output to single line for robust grep
+        output_flat=$(echo "$output" | tr '\n' ' ')
         # Check for RAM error (robust multi-pattern detection)
-        if echo "$output" | grep -Eqi "insufficient[[:space:]]*ram|ram_usage_exceeded|not enough ram|needs [0-9,]+ bytes|account does not have enough RAM|cannot create table"; then
+        if echo "$output_flat" | grep -Eqi "insufficient[[:space:]]*ram|ram_usage_exceeded|not enough ram|needs [0-9,]+ bytes|account does not have enough RAM|cannot create table"; then
             echo "[DEBUG] Entered insufficient RAM error handling block."
             echo "⚠️  Detected insufficient RAM error"
 
