@@ -8,10 +8,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CDT_VERSION=4.1.0 \
     NPM_CONFIG_UPDATE_NOTIFIER=false \
     NPM_CONFIG_CACHE=/tmp/npm-cache \
-    NODE_PATH=/usr/lib/node_modules \
-    LEAP_PATH=/usr/opt/leap/${LEAP_VERSION} \
-    CDT_PATH=/usr/opt/cdt/${CDT_VERSION} \
-    PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:${LEAP_PATH}/bin:${CDT_PATH}/bin"
+    NODE_PATH=/usr/lib/node_modules
+
+# Set path-related environment variables after LEAP and CDT are installed
+ENV LEAP_PATH=/usr/opt/leap/5.0.3 \
+    CDT_PATH=/usr/opt/cdt/4.1.0 \
+    PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/opt/leap/5.0.3/bin:/usr/opt/cdt/4.1.0/bin"
 
 # Create non-root user early for better layer caching
 ARG USER_ID=1000
@@ -77,7 +79,7 @@ COPY --chown=${USER_ID}:${GROUP_ID} package*.json ./
 
 # Install npm dependencies with cache and clean up in one layer
 RUN --mount=type=cache,target=/home/developer/.npm \
-    npm ci --prefer-offline --no-audit --no-fund \
+    npm install --prefer-offline --no-audit --no-fund \
     && npm cache clean --force
 
 # Copy application code
