@@ -202,9 +202,21 @@ deploy_contract() {
         
         # Calculate EOS amount needed (1 KB = 0.1 EOS is a common rate, adjust as needed)
         # Use awk for floating point math to avoid bc dependency
-        local eos_amount=$(awk -v bytes="$bytes" 'BEGIN { printf "%.4f", (bytes / 10000) + 0.1 }')
-        # Ensure we buy at least 1.0 EOS worth of RAM for small contracts
-        eos_amount=$(awk -v amt="$eos_amount" 'BEGIN { printf "%.4f", amt < 1.0 ? 1.0 : amt }')
+        local eos_amount_calc_output
+        eos_amount_calc_output=$(awk -v bytes="$bytes" 'BEGIN { printf "%.4f", (bytes / 10000) + 0.1 }' 2>&1)
+        if [ $? -ne 0 ]; then
+            echo "ERROR: awk failed calculating initial EOS amount for RAM for $contract. Input bytes: $bytes. Error: $eos_amount_calc_output" >&2
+            return 1
+        fi
+        local eos_amount="$eos_amount_calc_output"
+
+        local final_eos_amount_output
+        final_eos_amount_output=$(awk -v amt="$eos_amount" 'BEGIN { printf "%.4f", amt < 1.0 ? 1.0 : amt }' 2>&1)
+        if [ $? -ne 0 ]; then
+            echo "ERROR: awk failed adjusting final EOS amount for RAM for $contract. Input amount: $eos_amount. Error: $final_eos_amount_output" >&2
+            return 1
+        fi
+        eos_amount="$final_eos_amount_output"
         
         echo "💰 Attempting to buy $bytes bytes of RAM for $receiver (cost: ~$eos_amount EOS)..."
         
@@ -261,8 +273,16 @@ deploy_contract() {
                 echo "🔍 Determined needed RAM: $needed_ram bytes"
                 # Add 25% buffer to the needed RAM to ensure enough for table data
                 # Using awk for floating point math to avoid bc dependency
-                needed_ram=$(awk -v ram="$needed_ram" 'BEGIN { printf "%.0f", ram * 1.25 }')
-                echo "📊 Buying RAM with 25% buffer: $needed_ram bytes"
+                local buffered_ram_output
+                buffered_ram_output=$(awk -v ram="$needed_ram" 'BEGIN { printf "%.0f", ram * 1.25 }' 2>&1)
+                if [ $? -ne 0 ]; then
+                    echo "ERROR: awk failed calculating RAM buffer for $contract. Input RAM: $needed_ram. Error: $buffered_ram_output" >&2
+                    # Continue to attempt RAM purchase with unbuffered amount or let buy_ram handle default if needed_ram is now empty
+                    # but log the awk failure. The script will likely fail at buy_ram if needed_ram is bad.
+                else
+                    needed_ram="$buffered_ram_output"
+                fi
+                echo "📊 Buying RAM with 25% buffer (or original if buffer calc failed): $needed_ram bytes"
             fi
             
             # Try to buy more RAM
