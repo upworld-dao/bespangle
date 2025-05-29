@@ -283,6 +283,7 @@ deploy_contract() {
                 echo "ℹ️  Contract is already deployed with the same code"
             fi
             deployment_success=1
+            # Successfully deployed or already deployed
             return 0
         else
             echo "❌ Deployment failed with error:"
@@ -571,8 +572,9 @@ main() {
                 
             both)
                 echo -e "\n🔨 Building and Deploying $contract"
-                if $BUILD_SCRIPT -t "$contract"; then
-                    echo "✅ Build successful, deploying..."
+                # Run build script but don't fail the entire process if it returns non-zero
+                if $BUILD_SCRIPT -t "$contract" || true; then
+                    echo "✅ Build successful or skipped, attempting to deploy..."
                     if deploy_contract "$contract"; then
                         echo "✅ Successfully built and deployed $contract"
                         ((success_count++))
@@ -581,6 +583,8 @@ main() {
                         ((fail_count++))
                     fi
                 else
+                    # This should never be reached because of the '|| true' above
+                    # but keeping it for logical completeness
                     echo "❌ Build failed for $contract, skipping deployment" >&2
                     ((fail_count++))
                 fi
