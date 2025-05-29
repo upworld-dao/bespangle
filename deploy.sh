@@ -285,8 +285,22 @@ deploy_contract() {
                 status=0
             fi
             deployment_success=1
-            # Break out of the retry loop on success
-            break
+            # Return success status (0) immediately
+            return 0
+        fi
+        
+        # If we get here, the deployment failed
+        if [ $attempt -lt $max_retries ]; then
+            local wait_time=$((attempt * 2))
+            echo "⏳ Waiting $wait_time seconds before retry..."
+            sleep $wait_time
+        fi
+        
+        attempt=$((attempt + 1))
+    done
+    
+    # If we get here, all retries failed
+    return 1
         else
             echo "❌ Deployment failed with error:"
             echo "======================================"
@@ -662,6 +676,9 @@ main() {
     if [ $fail_count -gt 0 ]; then
         echo "❌ Failed: $fail_count (see details above)" >&2
         echo -e "\n💡 Some contracts failed to deploy. Check the error messages above for details."
+        return 1
+    elif [ $success_count -eq 0 ] && [ $skipped_count -eq 0 ]; then
+        echo "ℹ️  No contracts were processed. Please check your configuration."
         return 1
     else
         echo -e "\n✅ All contracts processed successfully!"
