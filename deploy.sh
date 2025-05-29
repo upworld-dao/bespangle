@@ -501,39 +501,33 @@ main() {
     echo "- Chain ID: $CHAIN_ID"
     
     # Determine which contracts to process
-    local contracts_to_process=()
+    local contracts_to_process
     if [ "$CONTRACTS" = "all" ]; then
-        # Get all contract names from the accounts section
         echo -e "\nDiscovering contracts for network: $NETWORK"
-        # Use jq with --arg to properly handle network names with special characters
         contracts_to_process=($(jq -r --arg net "$NETWORK" '.networks[$net].accounts | keys[]' "$NETWORK_CONFIG" 2>/dev/null))
-        
         if [ ${#contracts_to_process[@]} -eq 0 ]; then
             echo "ERROR: No contracts configured for network: $NETWORK" >&2
             echo "Available networks: $(jq -r '.networks | keys | join(", ")' "$NETWORK_CONFIG" 2>/dev/null)" >&2
             exit 1
         fi
-        
         if [ "$VERBOSE" -eq 1 ]; then
             echo "Found ${#contracts_to_process[@]} contracts to process"
         fi
     else
-        # Convert comma-separated list to array
         IFS=',' read -r -a contracts_to_process <<< "$CONTRACTS"
         echo -e "\nProcessing specified contracts: ${contracts_to_process[*]}"
     fi
-    
+
     # Create build directory with proper permissions if it doesn't exist
     if [ ! -d "build" ]; then
         echo "Creating build directory..."
         mkdir -p build || { echo "Failed to create build directory"; exit 1; }
         chmod 775 build || { echo "Failed to set permissions on build directory"; exit 1; }
     fi
-    
+
     # Ensure the build directory is owned by the current user
     chown -R $(id -u):$(id -g) build 2>/dev/null || true
-    
-    # Process each contract
+
     local success_count=0
     local fail_count=0
     local skipped_count=0
