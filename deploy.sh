@@ -412,7 +412,7 @@ main() {
                 ;;
             -v|--verbose)
                 VERBOSE=1
-                set -x  # Enable debug mode
+                # set -x  # Debug mode disabled (was enabled here)
                 shift
                 ;;
             -h|--help)
@@ -639,7 +639,7 @@ main() {
 
 
 # Run main function and handle exit code
-set -x  # Enable debug output
+# set -x  # Debug output disabled (was enabled here)
 
 # Run main function
 main "$@"
