@@ -25,6 +25,7 @@ NETWORK_CONFIG="network_config.json"
 ACTION="both"
 CONTRACTS="all"
 VERBOSE=0
+RUN_TESTS=0
 NETWORK=""
 
 # Path to build script
@@ -38,6 +39,7 @@ print_usage() {
     echo "  -c, --contracts CONTRACTS  Comma-separated list of contracts to deploy (default: all)"
     echo "  -a, --action ACTION      Action: build, deploy, or both (default: both)"
     echo "  -v, --verbose           Enable verbose output"
+    echo "  --run-tests             Run tests after building and before deploying"
     echo "  -h, --help              Show this help message"
 }
 
@@ -419,6 +421,10 @@ main() {
                 print_usage
                 return 0
                 ;;
+            --run-tests)
+                RUN_TESTS=1
+                shift
+                ;;
             *)
                 echo "ERROR: Unknown option: $1" >&2
                 print_usage
@@ -516,10 +522,40 @@ main() {
                 # Do not set overall_status=1 here, allow deployment attempts for contracts that might have built before the failure.
             else
                 echo "✅ Build script './build.sh -t \"$CONTRACTS\"' completed successfully."
+
+                # Run tests if --run-tests is specified and build was successful
+                if [ "$RUN_TESTS" -eq 1 ]; then
+                    echo -e "\n--- Running tests ---"
+                    local test_script_args="--skip-build"
+                    if [ "$VERBOSE" -eq 1 ]; then
+                        test_script_args="$test_script_args --verbose"
+                    fi
+                    
+                    # Ensure run_tests.sh is executable
+                    if [ -f ./run_tests.sh ]; then
+                        chmod +x ./run_tests.sh
+                    else
+                        echo "ERROR: run_tests.sh not found in current directory ($(pwd))" >&2
+                        cleanup_keosd
+                        exit 1 # Critical error, tests cannot run
+                    fi
+                    
+                    echo "Executing: ./run_tests.sh $test_script_args"
+                    if ./run_tests.sh $test_script_args; then
+                        echo "--- Tests passed successfully ---"
+                    else
+                        echo "ERROR: Tests failed. Aborting further operations." >&2
+                        cleanup_keosd
+                        exit 1 # Tests failed, stop everything
+                    fi
+                elif [ "$RUN_TESTS" -eq 1 ]; then
+                     echo "WARNING: --run-tests specified but build was not successful. Skipping tests." >&2
+                fi
             fi
         fi
         
-        # If action was just 'build', we're done
+        # If action was just 'build', we're done. 
+        # If tests were run and passed, and action is 'build', this is also a valid exit point.
         if [ "$ACTION" = "build" ]; then
             echo "Build completed. Use 'deploy' action to deploy the contracts."
             return 0

@@ -127,7 +127,7 @@ jobs:
               chown -R $(id -u):$(id -g) /github/workspace/build &&
               chmod -R 777 /github/workspace/build &&
               echo '=== Starting deployment script...' &&
-              ./deploy.sh --network \"$NETWORK\" --action both
+              ./deploy.sh --network \"$NETWORK\" --action both --run-tests
             "
           
           DEPLOYMENT_EXIT_CODE=$?

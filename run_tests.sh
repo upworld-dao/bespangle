@@ -12,6 +12,12 @@ PROJECT_ROOT=$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel) # More robust 
 
 # Function to build contracts using the build script
 build_contracts() {
+    # Check if build should be skipped
+    if [ "$SKIP_BUILD" = "1" ]; then
+        echo "--- Skipping contract build (--skip-build flag set) ---"
+        return 0
+    fi
+    
     echo "--- Building contracts using build.sh ---"
     
     # Ensure build script is executable
@@ -33,8 +39,31 @@ build_contracts() {
     echo "--- Contracts built successfully ---"
 }
 
+# Parse command line arguments
+parse_args() {
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --skip-build)
+                export SKIP_BUILD=1
+                shift
+                ;;
+            --verbose|-v)
+                export VERBOSE=1
+                shift
+                ;;
+            *)
+                echo "Unknown option: $1"
+                exit 1
+                ;;
+        esac
+    done
+}
+
 
 # --- Main Script Logic ---
+
+# Parse command line arguments
+parse_args "$@"
 
 # Check if running inside the designated Docker container
 if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
@@ -52,7 +81,7 @@ if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
     cd "${PROJECT_ROOT}" || exit 1
     build_contracts
 
-    # 1. Ensure eosio.token is built
+    # 1. Ensure eosio.token is built (silently)
     SYS_CONTRACTS_DIR="${PROJECT_ROOT}/build/eos-system-contracts"
     SYS_CONTRACTS_BUILD_DIR="${SYS_CONTRACTS_DIR}/build/contracts"
     TOKEN_WASM_PATH="${SYS_CONTRACTS_BUILD_DIR}/eosio.token/eosio.token.wasm"
@@ -60,47 +89,36 @@ if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
     SYS_CONTRACTS_TAG=v3.8.0
 
     if [ ! -f "${TOKEN_WASM_PATH}" ]; then
-        echo "--- Building eosio.token (${SYS_CONTRACTS_TAG}) as artifacts not found at ${TOKEN_WASM_PATH} ---"
-
         # Clean previous attempts if any
         rm -rf "${SYS_CONTRACTS_DIR}"
         mkdir -p "$(dirname "${SYS_CONTRACTS_DIR}")"
 
-        echo "Cloning eos-system-contracts tag ${SYS_CONTRACTS_TAG}..."
-        git clone --depth 1 --branch ${SYS_CONTRACTS_TAG} https://github.com/eosnetworkfoundation/eos-system-contracts.git "${SYS_CONTRACTS_DIR}"
+        # Clone and build eos-system-contracts silently
+        git clone --quiet --depth 1 --branch ${SYS_CONTRACTS_TAG} \
+            https://github.com/eosnetworkfoundation/eos-system-contracts.git "${SYS_CONTRACTS_DIR}"
 
-        echo "Configuring eosio.token build..."
-        export CDT_ROOT=${CDT_ROOT} # Export the assumed CDT root
+        export CDT_ROOT=${CDT_ROOT}
         export PATH=${CDT_ROOT}/bin:$PATH
         mkdir -p "${SYS_CONTRACTS_DIR}/build"
         cd "${SYS_CONTRACTS_DIR}/build" || exit 1
-        cmake ../ -DCMAKE_TOOLCHAIN_FILE=${CDT_ROOT}/lib/cmake/cdt/CDTWasmToolchain.cmake
-
-        echo "Compiling eosio.token..."
-        make -j$(nproc)
+        cmake ../ -DCMAKE_TOOLCHAIN_FILE=${CDT_ROOT}/lib/cmake/cdt/CDTWasmToolchain.cmake >/dev/null
+        make -j$(nproc) >/dev/null 2>&1
         cd "${PROJECT_ROOT}" # Return to project root
 
         if [ ! -f "${TOKEN_WASM_PATH}" ]; then
-           echo "ERROR: eosio.token build failed. WASM not found after build attempt."
+           echo "ERROR: eosio.token build failed. WASM not found after build attempt." >&2
            exit 1
         fi
         if [ ! -f "${TOKEN_ABI_PATH}" ]; then
-           echo "ERROR: eosio.token build failed. ABI (${TOKEN_ABI_PATH}) not found after build attempt."
+           echo "ERROR: eosio.token build failed. ABI not found after build attempt." >&2
            exit 1
         fi
-        echo "--- eosio.token build complete --- "
-    else
-        echo "--- Found existing eosio.token artifacts at ${TOKEN_WASM_PATH}, skipping build --- "
     fi
 
-    # 2. Print ABI Contents
-    if [ -f "${TOKEN_ABI_PATH}" ]; then
-        echo "--- Contents of ${TOKEN_ABI_PATH} (inside Docker) ---"
-        cat "${TOKEN_ABI_PATH}"
-        echo "------------------------------------"
-    else
-        echo "WARN: ABI file not found at ${TOKEN_ABI_PATH} inside Docker."
-        # Decide if this is critical - exit 1?
+    # Verify ABI exists (but don't print it)
+    if [ ! -f "${TOKEN_ABI_PATH}" ]; then
+        echo "ERROR: ABI file not found at ${TOKEN_ABI_PATH}" >&2
+        exit 1
     fi
 
 
@@ -131,6 +149,20 @@ else
 
     # 2. Run the tests inside the container
     echo "--- Running test script inside Docker container --- "
+    
+    # Build the command to pass through all arguments
+    DOCKER_CMD="./run_tests.sh"
+    
+    # Add --skip-build if it was specified
+    if [ "$SKIP_BUILD" = "1" ]; then
+        DOCKER_CMD="$DOCKER_CMD --skip-build"
+    fi
+    
+    # Add --verbose if it was specified
+    if [ "$VERBOSE" = "1" ]; then
+        DOCKER_CMD="$DOCKER_CMD --verbose"
+    fi
+    
     # Ensure the user running docker has permissions for the volume mount
     # Use --user to potentially avoid permission issues with generated files
     docker run --rm \
@@ -139,7 +171,7 @@ else
         -w /workspace \
         -e BESPANGLE_IN_DOCKER=true \
         "${DOCKER_IMAGE_NAME}" \
-        ./run_tests.sh # Execute this same script inside the container
+        /bin/bash -c "$DOCKER_CMD"
 
     # Capture and report the exit code from the Docker container
     docker_exit_code=$?
