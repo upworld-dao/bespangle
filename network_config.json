@@ -1,0 +1,49 @@
+{
+  "skip_contracts": ["tokenstaker", "govweight", "bountmanager"],
+  "networks": {
+    "jungle4": {
+      "endpoint": "http://jungle4.cryptolions.io",
+      "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
+      "system_symbol": "EOS",
+      "system_contract": "eosio",
+      "accounts": {
+        "aemanager": "aemanagerdev",
+        "andemitter": "andemittedev",
+        "authority": "authoritydev",
+        "badgedata": "badgedatadev",
+        "bamanager": "bamanagerdev",
+        "boundedagg": "boundedagdev",
+        "boundedstats": "boundedstdev",
+        "bounties": "bountiesdevd",
+        "cumulative": "cumulativdev",
+        "org": "organizatdev",
+        "requests": "requestsdevd",
+        "simmanager": "simmanagedev",
+        "simplebadge": "simplebaddev",
+        "statistics": "statisticdev",
+        "subscription": "subscribedev"
+      }
+    },
+    "mainnet": {
+      "endpoint": "https://eos.greymass.com",
+      "chain_id": "aca376f206b8fc25a6ed44dbdc66547c36c6c33e3a119ffbeaef943642f0e906",
+      "system_symbol": "EOS",
+      "system_contract": "eosio",
+      "accounts": {}
+    },
+    "wax": {
+      "endpoint": "https://wax.greymass.com",
+      "chain_id": "1064487b3cd1a897ce03ae5b6a865651747e2e152090f99c1d19d44e01aea5a4",
+      "system_symbol": "WAX",
+      "system_contract": "eosio",
+      "accounts": {}
+    },
+    "telos": {
+      "endpoint": "https://telos.greymass.com",
+      "chain_id": "4667b205c6838ef70ff7988f6e8257e8be0e1284a2f59699054a018f743b1d11",
+      "system_symbol": "TLOS",
+      "system_contract": "eosio",
+      "accounts": {}
+    }
+  }
+}

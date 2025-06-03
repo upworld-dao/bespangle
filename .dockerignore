@@ -1,0 +1,20 @@
+# Ignore Git directory
+.git/
+.gitignore
+
+# Ignore IDE/editor configuration
+.vscode/
+.idea/
+*.swp
+
+# Ignore Dockerfile and related scripts if not needed inside the image itself
+# Dockerfile
+# .dockerignore
+
+# Ignore OS-specific files
+.DS_Store
+Thumbs.db
+
+# Ignore other configuration/log files if necessary
+*.log
+cleos_config.sh

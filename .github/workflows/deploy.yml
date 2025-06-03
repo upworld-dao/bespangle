@@ -1,0 +1,148 @@
+name: Deploy Antelope Contracts
+
+on:
+  push:
+    branches:
+      - '**'  # Run on all branches
+  workflow_dispatch:
+    inputs:
+      network:
+        description: 'Network to deploy to (must exist in network_config.json)'
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.network || github.ref_name }}
+    # This ensures the job will fail if the environment doesn't exist
+    # and properly loads the environment's secrets
+    permissions:
+      contents: read
+      deployments: write
+      id-token: write  # Needed for GitHub OIDC
+      pull-requests: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          driver: docker-container
+          
+      - name: Build Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          tags: bespangle-dev-env
+          load: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          
+      - name: Prepare build directory
+        run: |
+          # Create build directory with correct permissions
+          mkdir -p build
+          chmod -R 777 build
+          
+      # Environment verification is handled by the job-level environment setting
+      
+      - name: Determine target network
+        id: network
+        run: |
+          # Get the branch name (remove refs/heads/ prefix if present)
+          BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+          NETWORK="$BRANCH_NAME"
+          
+          # Verify the network exists in the config
+          if ! jq -e ".networks.\"$NETWORK\"" network_config.json > /dev/null; then
+            echo "ERROR: No configuration found for network: $NETWORK" >&2
+            echo "Available networks: $(jq -r '.networks | keys | join(", ")' network_config.json)" >&2
+            echo "\nTo deploy to this branch, add a '$NETWORK' configuration to network_config.json" >&2
+            exit 1
+          fi
+          
+          echo "Using network: $NETWORK"
+          echo "network=$NETWORK" >> $GITHUB_OUTPUT
+          echo "Deploying to network: $NETWORK"
+      
+      - name: Verify network configuration
+        run: |
+          NETWORK=${{ steps.network.outputs.network }}
+          echo "Verifying configuration for network: $NETWORK"
+          
+          # Check if account configuration exists
+          if ! jq -e ".networks.\"$NETWORK\".accounts" network_config.json > /dev/null; then
+            echo "ERROR: No accounts configured for network: $NETWORK" >&2
+            exit 1
+          fi
+          
+          echo "Network configuration verified successfully"
+      
+      - name: Deploy Contracts
+        env:
+          DEPLOYER_PRIVATE_KEY: ${{ secrets.DEPLOYER_PRIVATE_KEY }}
+        run: |
+          # Enable debug output
+          set -x
+          
+          # Make scripts executable
+          chmod +x ./deploy.sh
+          chmod +x ./docker-run.sh
+          
+          # Set GitHub workspace variables
+          export GITHUB_WORKSPACE=$(pwd)
+          
+          # Get the network from the previous step
+          NETWORK="${{ steps.network.outputs.network }}"
+          
+          # Ensure the build directory exists with correct permissions
+          mkdir -p build
+          chmod -R 777 build
+          
+          # Run the deployment in Docker with proper environment variables and user mapping
+          echo "🚀 Starting deployment to $NETWORK network..."
+          echo "Working directory: $(pwd)"
+          
+          # Run the deployment command with debug output
+          set -x  # Enable command echoing
+          
+          docker run --rm \
+            -e BESPANGLE_IN_DOCKER=true \
+            -e GITHUB_WORKSPACE=/github/workspace \
+            -e NETWORK="$NETWORK" \
+            -e DEPLOYER_PRIVATE_KEY="${{ secrets.DEPLOYER_PRIVATE_KEY }}" \
+            -e USER_ID=$(id -u) \
+            -e GROUP_ID=$(id -g) \
+            -e GIT_CONFIG_SYSTEM=/tmp/gitconfig \
+            -e GIT_CONFIG_GLOBAL=/tmp/gitconfig \
+            -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \
+            -v "$GITHUB_WORKSPACE:/github/workspace" \
+            -v "$GITHUB_WORKSPACE/build:/github/workspace/build" \
+            -w /github/workspace \
+            --user "root" \
+            bespangle-dev-env \
+            bash -c "
+              set -ex &&
+              echo '=== Configuring Git...' && \
+              git config --global --add safe.directory /github/workspace && \
+              git config --system --add safe.directory /github/workspace && \
+              echo '=== Setting permissions...' && \
+              chown -R $(id -u):$(id -g) /github/workspace/build && \
+              chmod -R 777 /github/workspace/build && \
+              echo '=== Starting deployment script...' && \
+              ./deploy.sh --network \"$NETWORK\" --action both --run-tests
+            "
+          
+          DEPLOYMENT_EXIT_CODE=$?
+          echo "=== Deployment script exited with code: $DEPLOYMENT_EXIT_CODE ==="
+          
+          # Check if deployment was successful
+          if [ $DEPLOYMENT_EXIT_CODE -ne 0 ]; then
+            echo "❌ Deployment failed with exit code $DEPLOYMENT_EXIT_CODE"
+            exit $DEPLOYMENT_EXIT_CODE
+          else
+            echo "✅ Successfully deployed to ${{ steps.network.outputs.network }} network"
+          fi
