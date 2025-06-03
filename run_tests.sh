@@ -75,19 +75,33 @@ if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
     git config --global --add safe.directory /workspace
     git config --global --add safe.directory /github/workspace
     
+    # Suppress Git advice messages
+    git config --global advice.detachedHead false
+    
     # Also set the safe directory in the local config as a fallback
     if [ -d "/github/workspace/.git" ]; then
         cd /github/workspace
         git config --local --add safe.directory /github/workspace
+        git config --local advice.detachedHead false
         cd - >/dev/null
     fi
 
-    # Set paths relative to /workspace
-    PROJECT_ROOT="/workspace"
+    # Set paths relative to the workspace
+    if [ -d "/github/workspace" ]; then
+        # Running in GitHub Actions
+        PROJECT_ROOT="/github/workspace"
+    else
+        # Running locally
+        PROJECT_ROOT="/workspace"
+    fi
     export PATH="/usr/opt/cdt/4.1.0/bin:$PATH"
     
     # Ensure build directory exists
     mkdir -p "${PROJECT_ROOT}/build"
+    
+    # Debug: Show build directory contents
+    echo "--- Build directory contents ---"
+    ls -la "${PROJECT_ROOT}/build" || true
     
     # Build all contracts using the build script
     cd "${PROJECT_ROOT}" || exit 1
