@@ -44,29 +44,6 @@
       "system_symbol": "TLOS",
       "system_contract": "eosio",
       "accounts": {}
-    },
-    "automate-deployment": {
-        "endpoint": "http://jungle4.cryptolions.io",
-        "chain_id": "73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d",
-        "system_symbol": "EOS",
-        "system_contract": "eosio",
-        "accounts": {
-          "aemanager": "aemanagerdlt",
-          "andemitter": "andemitterdl",
-          "authority": "authoritydlt",
-          "badgedata": "badgedatadlt",
-          "bamanager": "bamanagerdlt",
-          "boundedagg": "boundedagdlt",
-          "boundedstats": "boundedstdlt",
-          "bounties": "bountiesdlta",
-          "cumulative": "cumulativdlt",
-          "org": "organizatdlt",
-          "requests": "requestsdlta",
-          "simmanager": "simmanagedlt",
-          "simplebadge": "simplebaddlt",
-          "statistics": "statisticdlt",
-          "subscription": "subscribedlt"
-        }
     }
   }
 }
