@@ -70,9 +70,17 @@ if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
     # --- INSIDE DOCKER --- #
     echo "--- Running tests inside Docker container --- "
     
-    # Configure Git to use a writable config location and trust the workspace directory
+    # Configure Git to use a writable config location and trust the workspace directories
     export GIT_CONFIG_GLOBAL="/tmp/gitconfig"
     git config --global --add safe.directory /workspace
+    git config --global --add safe.directory /github/workspace
+    
+    # Also set the safe directory in the local config as a fallback
+    if [ -d "/github/workspace/.git" ]; then
+        cd /github/workspace
+        git config --local --add safe.directory /github/workspace
+        cd - >/dev/null
+    fi
 
     # Set paths relative to /workspace
     PROJECT_ROOT="/workspace"
