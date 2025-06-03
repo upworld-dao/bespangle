@@ -116,6 +116,9 @@ jobs:
             -e DEPLOYER_PRIVATE_KEY="${{ secrets.DEPLOYER_PRIVATE_KEY }}" \
             -e USER_ID=$(id -u) \
             -e GROUP_ID=$(id -g) \
+            -e GIT_CONFIG_SYSTEM=/tmp/gitconfig \
+            -e GIT_CONFIG_GLOBAL=/tmp/gitconfig \
+            -e GIT_DISCOVERY_ACROSS_FILESYSTEM=1 \
             -v "$GITHUB_WORKSPACE:/github/workspace" \
             -v "$GITHUB_WORKSPACE/build:/github/workspace/build" \
             -w /github/workspace \
@@ -123,10 +126,13 @@ jobs:
             bespangle-dev-env \
             bash -c "
               set -ex &&
-              echo '=== Setting permissions...' &&
-              chown -R $(id -u):$(id -g) /github/workspace/build &&
-              chmod -R 777 /github/workspace/build &&
-              echo '=== Starting deployment script...' &&
+              echo '=== Configuring Git...' && \
+              git config --global --add safe.directory /github/workspace && \
+              git config --system --add safe.directory /github/workspace && \
+              echo '=== Setting permissions...' && \
+              chown -R $(id -u):$(id -g) /github/workspace/build && \
+              chmod -R 777 /github/workspace/build && \
+              echo '=== Starting deployment script...' && \
               ./deploy.sh --network \"$NETWORK\" --action both --run-tests
             "
           
