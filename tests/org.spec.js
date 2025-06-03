@@ -78,7 +78,6 @@ describe('Org Contract Tests', () => {
 
     // --- Setup: Runs before each test in the suite ---
     beforeEach(async () => {
-        console.log('orgContract object in beforeEach:', orgContract); // Log the object
         // --- Blockchain Setup ---
         blockchain = new Blockchain(); // Fresh blockchain for each test
 
@@ -247,7 +246,6 @@ describe('Org Contract Tests', () => {
             const orgsTable = orgContract.tables.orgs(orgScope); // Pass BigInt scope
             const orgPrimaryKeyBigInt = nameToBigInt(ORG_ACCOUNT_NAME); // Convert primary key to BigInt
             const orgRow = await orgsTable.get(orgPrimaryKeyBigInt); // Pass BigInt primary key to .get()
-            console.log('Org Row after createTestOrg call:', orgRow); // Log the row data
             expect(orgRow, 'Org row should exist after createTestOrg').to.not.be.undefined; // Assert that the row exists
 
             return orgAccount;
@@ -270,7 +268,6 @@ describe('Org Contract Tests', () => {
             const orgsTable = orgContract.tables.orgs(orgScope); // Pass BigInt scope
             const orgPrimaryKeyBigInt = nameToBigInt(ORG_ACCOUNT_NAME); // Convert primary key to BigInt
             const orgRow = await orgsTable.get(orgPrimaryKeyBigInt); // Pass BigInt primary key to .get()
-            console.log('Org Row after createTestOrg call:', orgRow); // Log the row data
             expect(orgRow, 'Org row should exist after createTestOrg').to.not.be.undefined; // Assert that the row exists
         } catch (err) {
             console.error("Error fetching org row in beforeEach:", err); // Log specific error
