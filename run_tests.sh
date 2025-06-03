@@ -69,6 +69,10 @@ parse_args "$@"
 if [ "$BESPANGLE_IN_DOCKER" = "true" ]; then
     # --- INSIDE DOCKER --- #
     echo "--- Running tests inside Docker container --- "
+    
+    # Configure Git to use a writable config location and trust the workspace directory
+    export GIT_CONFIG_GLOBAL="/tmp/gitconfig"
+    git config --global --add safe.directory /workspace
 
     # Set paths relative to /workspace
     PROJECT_ROOT="/workspace"
