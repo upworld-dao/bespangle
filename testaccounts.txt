@@ -35,4 +35,4 @@ BOUNDED_HLL_CONTRACT="boundedhldev"
 SUBSCRIPTION_CONTRACT="subscribedev"
 
 REQUESTS_CONTRACT="requestsdevd"
-BOUNTIES_CONTRACT="bountiesdevd"
+BOUNTIES_CONTRACT="bountiesdevd"    
