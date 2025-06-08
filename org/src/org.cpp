@@ -16,9 +16,8 @@ ACTION org::chkscontract(name org, name checks_contract) {
 
 
 ACTION org::image(name org, string ipfs_image) {
-  // Check if the caller is authorized for this action
-  name current_account = get_first_receiver();
-  check(is_action_authorized(org, "image"_n, current_account), "Account not authorized for this action");
+  // Require that the org account authorizes the update.
+  require_auth(org);
     
   // Open the table with the contract's scope
   orgs_index _orgs(get_self(), get_self().value);

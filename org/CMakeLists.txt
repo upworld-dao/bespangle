@@ -31,10 +31,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/interface/boundedaggint
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/boundedstats.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/boundedstats.hpp @ONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/bamanager.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/bamanager.hpp @ONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/requests.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/requests.hpp @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/govweight.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/govweight.hpp @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/interface/govweightinterface.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/govweightinterface.hpp @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/tokenstaker.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/tokenstaker.hpp @ONLY)
-configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/interface/tokenstakerinterface.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/tokenstakerinterface.hpp @ONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/mrbadge.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/mrbadge.hpp @ONLY)
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/include/hppin/bounties.hpp.in ${CMAKE_CURRENT_BINARY_DIR}/include/bounties.hpp @ONLY)
 
